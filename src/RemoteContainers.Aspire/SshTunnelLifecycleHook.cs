@@ -1,0 +1,51 @@
+// <copyright file="SshTunnelLifecycleHook.cs" company="Henrik Jensen">
+// Copyright 2025 Henrik Jensen
+//
+// Licensed under the Apache License, Version 2.0 (the "License")
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+// </copyright>
+
+using Aspire.Hosting;
+using Aspire.Hosting.ApplicationModel;
+using Aspire.Hosting.Eventing;
+using Aspire.Hosting.Lifecycle;
+
+namespace Hj.RemoteContainers.Aspire;
+
+internal sealed class SshTunnelLifecycleHook : IDistributedApplicationEventingSubscriber
+{
+  private readonly SshTunnelManager _tunnelManager;
+
+  public SshTunnelLifecycleHook(SshTunnelManager tunnelManager) => _tunnelManager = tunnelManager;
+
+  public Task SubscribeAsync(
+    IDistributedApplicationEventing eventing,
+    DistributedApplicationExecutionContext executionContext,
+    CancellationToken cancellationToken = default)
+  {
+    eventing.Subscribe<ResourceEndpointsAllocatedEvent>(SetUpTunnelAsync);
+    return Task.CompletedTask;
+  }
+
+  private async Task SetUpTunnelAsync(
+    ResourceEndpointsAllocatedEvent evt,
+    CancellationToken cancellationToken)
+  {
+    // Only tunnel container resources.
+    if (!evt.Resource.Annotations.OfType<ContainerImageAnnotation>().Any())
+    {
+      return;
+    }
+
+    await _tunnelManager.AddAllContainerPortForwardsAsync(evt.Resource.Name, cancellationToken);
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "configurations": [
+    {
+      "type": "aspire",
+      "request": "launch",
+      "name": "Aspire: Launch",
+      "program": "${workspaceFolder}/examples/Aspire.AppHost/Examples.Aspire.AppHost.csproj",
+      "debuggers": {
+        "project": {
+          "console": "integratedTerminal",
+          "logging": {
+            "moduleLoad": false
+          }
+        },
+        "apphost": {
+          "stopAtEntry": true
+        }
+      }
+    }
+  ]
+}

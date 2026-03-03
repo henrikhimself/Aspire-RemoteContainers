@@ -1,0 +1,9 @@
+root = false
+
+[*.cs]
+# SA1633: A C# code file is missing a standard file header
+dotnet_diagnostic.SA1633.severity = error
+file_header_template=<copyright file="{fileName}" company="Henrik Jensen">\nCopyright 2025 Henrik Jensen\n\nLicensed under the Apache License, Version 2.0 (the "License")\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\nhttp://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an "AS IS" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.\n</copyright>
+
+# SA1636: The file header at the top of a C# code file does not contain the appropriate copyright text
+dotnet_diagnostic.SA1636.severity = none
