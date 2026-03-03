@@ -2,5 +2,7 @@
   "recommendations": [
     "editorconfig.editorconfig",
     "ms-dotnettools.csdevkit",
+    "github.vscode-github-actions",
+    "microsoft-aspire.aspire-vscode"
   ]
 }
