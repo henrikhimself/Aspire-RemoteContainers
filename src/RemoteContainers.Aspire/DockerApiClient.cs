@@ -175,9 +175,14 @@ internal sealed class DockerApiClient
     handler.ClientCertificates.Add(clientCert);
     handler.ServerCertificateCustomValidationCallback = (_, serverCert, chain, _) =>
     {
-      chain!.ChainPolicy.CustomTrustStore.Add(caCert);
-      chain!.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-      return chain.Build(serverCert!);
+      if (serverCert is null || chain is null)
+      {
+        return false;
+      }
+
+      chain.ChainPolicy.CustomTrustStore.Add(caCert);
+      chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+      return chain.Build(serverCert);
     };
 
     return handler;
