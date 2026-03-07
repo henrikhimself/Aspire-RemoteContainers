@@ -46,7 +46,7 @@ The following specialized skills are available in `.github/skills/`:
 
 ### Directory Structure
 - **`/src`**: Main source code for the Remote Containers Aspire extension
-- **`/exampels`**: Source code for an example App Host that uses the Containers Aspire extension
+- **`/examples`**: Source code for an example App Host that uses the Containers Aspire extension
 
 ### Key Configuration Files
 - **`global.json`**: Pins .NET SDK version - never modify without explicit request

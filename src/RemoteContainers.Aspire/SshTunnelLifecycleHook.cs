@@ -27,18 +27,13 @@ internal sealed class SshTunnelLifecycleHook : IDistributedApplicationEventingSu
 
   public SshTunnelLifecycleHook(SshTunnelManager tunnelManager) => _tunnelManager = tunnelManager;
 
-  public Task SubscribeAsync(
-    IDistributedApplicationEventing eventing,
-    DistributedApplicationExecutionContext executionContext,
-    CancellationToken cancellationToken = default)
+  public Task SubscribeAsync(IDistributedApplicationEventing eventing, DistributedApplicationExecutionContext executionContext, CancellationToken cancellationToken)
   {
     eventing.Subscribe<ResourceEndpointsAllocatedEvent>(SetUpTunnelAsync);
     return Task.CompletedTask;
   }
 
-  private async Task SetUpTunnelAsync(
-    ResourceEndpointsAllocatedEvent evt,
-    CancellationToken cancellationToken)
+  private async Task SetUpTunnelAsync(ResourceEndpointsAllocatedEvent evt, CancellationToken cancellationToken)
   {
     // Only tunnel container resources.
     if (!evt.Resource.Annotations.OfType<ContainerImageAnnotation>().Any())

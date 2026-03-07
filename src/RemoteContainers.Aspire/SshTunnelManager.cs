@@ -91,9 +91,7 @@ internal sealed class SshTunnelManager : IDisposable
   /// <param name="resourceName">A resource name for which remote container ports will be retrieved.</param>
   /// <param name="cancellationToken">A cancellation token.</param>
   /// <returns>A task.</returns>
-  public async Task AddAllContainerPortForwardsAsync(
-    string resourceName,
-    CancellationToken cancellationToken = default)
+  public async Task AddAllContainerPortForwardsAsync(string resourceName, CancellationToken cancellationToken)
   {
     if (_sshClient is null || !_sshClient.IsConnected)
     {
@@ -115,7 +113,14 @@ internal sealed class SshTunnelManager : IDisposable
 
   public void Dispose()
   {
-    foreach (var port in _forwardedPorts)
+    ForwardedPortLocal[] portsSnapshot;
+    lock (_lock)
+    {
+      portsSnapshot = [.. _forwardedPorts];
+      _forwardedPorts.Clear();
+    }
+
+    foreach (var port in portsSnapshot)
     {
       try
       {
@@ -207,7 +212,7 @@ internal sealed class SshTunnelManager : IDisposable
         if (_logger.IsEnabled(LogLevel.Information))
         {
           _logger.LogInformation(
-            "Port forward established: localhost:{Port} → remote:{Port} ({Description})",
+            "Port forward established: localhost:{LocalPort} → remote:{RemotePort} ({Description})",
             port,
             port,
             description);

@@ -63,9 +63,7 @@ internal sealed class DockerApiClient
   /// <returns>
   /// A dictionary mapping container port → Docker host port, or null when disabled or timed out.
   /// </returns>
-  public async Task<IReadOnlyDictionary<int, int>?> GetAllContainerHostPortsAsync(
-    string resourceName,
-    CancellationToken cancellationToken = default)
+  public async Task<IReadOnlyDictionary<int, int>?> GetAllContainerHostPortsAsync(string resourceName, CancellationToken cancellationToken)
   {
     if (!_isEnabled)
     {
@@ -185,9 +183,7 @@ internal sealed class DockerApiClient
     return handler;
   }
 
-  private async Task<ContainerPorts?> TryQueryAllContainerHostPortsAsync(
-    string resourceName,
-    CancellationToken cancellationToken)
+  private async Task<ContainerPorts?> TryQueryAllContainerHostPortsAsync(string resourceName, CancellationToken cancellationToken)
   {
     var json = await _httpClient.GetStringAsync("containers/json", cancellationToken);
 
