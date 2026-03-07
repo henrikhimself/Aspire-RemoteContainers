@@ -38,10 +38,10 @@ internal sealed class DockerApiClient
   {
     _logger = logger;
     _httpClient = httpClient;
-
-    var dockerHost = Environment.GetEnvironmentVariable("DOCKER_HOST");
-    _isEnabled = !string.IsNullOrEmpty(dockerHost) && dockerHost.StartsWith("tcp://", StringComparison.OrdinalIgnoreCase);
+    _isEnabled = httpClient.BaseAddress is not null;
   }
+
+  internal string? RemoteHost => _httpClient.BaseAddress?.Host;
 
   /// <summary>
   /// Polls until the named container is running and returns ALL its published port mappings, or null if the container
@@ -146,27 +146,25 @@ internal sealed class DockerApiClient
 
   /// <summary>
   /// Creates the <see cref="HttpClientHandler"/> for the Docker API. Loads mutual TLS certificates
-  /// from DOCKER_CERT_PATH when DOCKER_HOST is a remote tcp:// address.
+  /// from DOCKER_CERT_PATH when TLS verification is enabled.
   /// Throws <see cref="InvalidOperationException"/> if DOCKER_CERT_PATH is not set.
   /// </summary>
+  /// <param name="tlsVerify">Whether DOCKER_TLS_VERIFY is enabled.</param>
   /// <returns>A http client handler configured to use a client certificate.</returns>
   [SuppressMessage(
     "Reliability",
     "CA2000:Dispose objects before losing scope",
     Justification = "Certificates are app-lifetime objects: clientCert is owned by ClientCertificates, caCert is captured by the validation callback. Both live until process exit.")]
-  internal static HttpClientHandler CreateTlsHandler()
+  internal static HttpClientHandler CreateTlsHandler(bool tlsVerify)
   {
-    var dockerHost = Environment.GetEnvironmentVariable("DOCKER_HOST");
-
-    if (string.IsNullOrEmpty(dockerHost)
-      || !dockerHost.StartsWith("tcp://", StringComparison.OrdinalIgnoreCase))
+    if (!tlsVerify)
     {
       return new HttpClientHandler();
     }
 
     var certPath = Environment.GetEnvironmentVariable("DOCKER_CERT_PATH")
       ?? throw new InvalidOperationException(
-        "DOCKER_CERT_PATH must be set in the environment when DOCKER_HOST is a remote tcp:// address.");
+        "DOCKER_CERT_PATH must be set in the environment when DOCKER_TLS_VERIFY=1.");
 
     var caCert = X509Certificate2.CreateFromPem(
       File.ReadAllText(Path.Combine(certPath, "ca.pem")));

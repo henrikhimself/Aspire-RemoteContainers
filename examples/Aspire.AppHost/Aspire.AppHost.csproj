@@ -10,4 +10,8 @@
     <ProjectReference Include="../../src/RemoteContainers.Aspire/RemoteContainers.Aspire.csproj" IsAspireProjectResource="false" />
   </ItemGroup>
 
+  <ItemGroup>
+    <AdditionalFiles Include="..\..\stylecop.json" />
+  </ItemGroup>
+
 </Project>

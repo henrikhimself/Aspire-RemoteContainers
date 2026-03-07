@@ -32,27 +32,34 @@ public static class SshTunnelExtensions
   /// <returns>The application builder instance.</returns>
   public static IDistributedApplicationBuilder AddSshTunneling(this IDistributedApplicationBuilder builder)
   {
-    // Guard against double registration.
-    if (builder.Services.Any(d => d.ServiceType == typeof(SshTunnelManager)))
+    var dockerHost = Environment.GetEnvironmentVariable("DOCKER_HOST");
+    if (string.IsNullOrWhiteSpace(dockerHost))
     {
       return builder;
     }
 
-    builder.Services.AddHttpClient<DockerApiClient>(client =>
+    if (!builder.Services.Any(d => d.ServiceType == typeof(DockerApiClient)))
     {
-      var dockerHost = Environment.GetEnvironmentVariable("DOCKER_HOST");
-      if (!string.IsNullOrEmpty(dockerHost)
-        && dockerHost.StartsWith("tcp://", StringComparison.OrdinalIgnoreCase))
+      var tlsVerify = string.Equals(
+        Environment.GetEnvironmentVariable("DOCKER_TLS_VERIFY"), "1", StringComparison.Ordinal);
+
+      builder.Services.AddHttpClient<DockerApiClient>(client =>
       {
-        client.BaseAddress = new Uri(
-          dockerHost.Replace("tcp://", "https://", StringComparison.OrdinalIgnoreCase));
-      }
-    })
-    .ConfigurePrimaryHttpMessageHandler(DockerApiClient.CreateTlsHandler)
-    .AddStandardResilienceHandler();
+        if (!string.IsNullOrEmpty(dockerHost)
+          && dockerHost.StartsWith("tcp://", StringComparison.OrdinalIgnoreCase))
+        {
+          var scheme = tlsVerify ? "https://" : "http://";
+          client.BaseAddress = new Uri(
+            dockerHost.Replace("tcp://", scheme, StringComparison.OrdinalIgnoreCase));
+        }
+      })
+      .ConfigurePrimaryHttpMessageHandler(() => DockerApiClient.CreateTlsHandler(tlsVerify))
+      .AddStandardResilienceHandler();
+    }
 
     builder.Services.TryAddSingleton<SshTunnelManager>();
     builder.Services.TryAddEventingSubscriber<SshTunnelLifecycleHook>();
+
     return builder;
   }
 }

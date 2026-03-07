@@ -37,12 +37,11 @@ internal sealed class SshTunnelManager : IDisposable
     _logger = logger;
     _dockerApiClient = dockerApiClient;
 
-    var dockerHost = Environment.GetEnvironmentVariable("DOCKER_HOST");
+    var remoteHost = dockerApiClient.RemoteHost;
     var sshHost = configuration["SSH_HOST"];
     var sshUser = configuration["SSH_USER"];
 
-    if (string.IsNullOrEmpty(dockerHost)
-      || !dockerHost.StartsWith("tcp://", StringComparison.OrdinalIgnoreCase))
+    if (remoteHost is null)
     {
       _logger.LogInformation("SSH tunneling disabled - DOCKER_HOST is not a remote tcp:// address");
       return;
@@ -50,7 +49,7 @@ internal sealed class SshTunnelManager : IDisposable
 
     if (string.IsNullOrEmpty(sshHost))
     {
-      sshHost = new Uri(dockerHost).Host;
+      sshHost = remoteHost;
     }
 
     if (string.IsNullOrEmpty(sshUser))
@@ -197,13 +196,14 @@ internal sealed class SshTunnelManager : IDisposable
 
     lock (_lock)
     {
+      ForwardedPortLocal? forwardedPort = null;
       try
       {
-        var forwardedPort = new ForwardedPortLocal("127.0.0.1", port, "127.0.0.1", port);
+        forwardedPort = new ForwardedPortLocal("127.0.0.1", port, "127.0.0.1", port);
         _sshClient.AddForwardedPort(forwardedPort);
         forwardedPort.Start();
-        _forwardedPorts.Add(forwardedPort);
 
+        _forwardedPorts.Add(forwardedPort);
         if (_logger.IsEnabled(LogLevel.Information))
         {
           _logger.LogInformation(
@@ -215,6 +215,7 @@ internal sealed class SshTunnelManager : IDisposable
       }
       catch (Exception ex)
       {
+        forwardedPort?.Dispose();
         if (_logger.IsEnabled(LogLevel.Warning))
         {
           _logger.LogWarning(ex, "Failed to create port forward for {Port} ({Description})", port, description);

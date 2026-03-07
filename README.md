@@ -1,6 +1,6 @@
 # Aspire Remote Containers
 
-Use [Aspire](https://learn.microsoft.com/dotnet/aspire/) with a remote Docker or Podman engine via automatic SSH port forwarding.
+Use Aspire with a remote Docker or Podman engine via automatic SSH port forwarding.
 
 ## The Problem
 
@@ -98,7 +98,7 @@ If `DOCKER_HOST` is not set or does not start with `tcp://`, the extension does 
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download) or later
-- [.NET Aspire](https://learn.microsoft.com/dotnet/aspire/fundamentals/setup-tooling)
+- .NET 10 SDK (LTS)
+- Aspire
 - A remote Docker or Podman engine exposed over TCP with TLS
 - SSH access to the remote host with key-based authentication

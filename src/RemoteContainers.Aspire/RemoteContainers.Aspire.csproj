@@ -28,7 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Models/" />
+    <AdditionalFiles Include="..\..\stylecop.json" />
   </ItemGroup>
 
 </Project>
