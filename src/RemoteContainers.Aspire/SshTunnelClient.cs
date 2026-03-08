@@ -72,6 +72,7 @@ internal sealed class SshTunnelClient : IDisposable
     catch (Exception)
     {
       forwardedPort?.Dispose();
+      forwardedPort = null;
       return false;
     }
   }
@@ -128,12 +129,9 @@ internal sealed class SshTunnelClient : IDisposable
         _sshClient.Disconnect();
         _sshClient.Dispose();
 
-        if (_keyFiles is not null)
+        foreach (var keyFile in _keyFiles)
         {
-          foreach (var keyFile in _keyFiles)
-          {
-            keyFile.Dispose();
-          }
+          keyFile.Dispose();
         }
       }
 

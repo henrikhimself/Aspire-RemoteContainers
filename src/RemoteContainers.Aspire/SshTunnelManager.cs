@@ -115,7 +115,10 @@ internal sealed class SshTunnelManager : IDisposable
           }
         }
 
-        _sshTunnelClient.Value.Dispose();
+        if (_sshTunnelClient.IsValueCreated)
+        {
+          _sshTunnelClient.Value.Dispose();
+        }
       }
 
       _disposedValue = true;

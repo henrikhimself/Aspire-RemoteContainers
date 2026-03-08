@@ -72,7 +72,7 @@ internal sealed class AppConfiguration
       {
         var uriBuilder = new UriBuilder(dockerHost)
         {
-          Scheme = IsDockerTls ? "https://" : "http://",
+          Scheme = IsDockerTls ? "https" : "http",
         };
         return uriBuilder;
       }
@@ -98,19 +98,33 @@ internal sealed class AppConfiguration
       return false;
     }
 
-    var caCertPath = Path.Combine(DockerCertPath, "ca.pem");
-    if (File.Exists(caCertPath))
+    if (!TryCreateCertificate(Path.Combine(DockerCertPath, "ca.pem"), null, out caCert))
     {
-      caCert = X509Certificate2.CreateFromPem(File.ReadAllText(caCertPath));
+      return false;
     }
 
-    var clientCertPath = Path.Combine(DockerCertPath, "cert.pem");
-    var clientKeyPath = Path.Combine(DockerCertPath, "key.pem");
-    if (File.Exists(clientCertPath) && File.Exists(clientKeyPath))
+    if (!TryCreateCertificate(Path.Combine(DockerCertPath, "cert.pem"), Path.Combine(DockerCertPath, "key.pem"), out clientCert))
     {
-      clientCert = X509Certificate2.CreateFromPem(File.ReadAllText(clientCertPath), File.ReadAllText(clientKeyPath));
+      caCert.Dispose();
+      return false;
     }
 
-    return caCert is not null && clientCert is not null;
+    return true;
+  }
+
+  [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Disposed elsewhere")]
+  private static bool TryCreateCertificate(string certPath, string? keyPath, [NotNullWhen(true)] out X509Certificate2? cert)
+  {
+    var certPem = File.Exists(certPath) ? File.ReadAllText(certPath) : null;
+    var keyPem = File.Exists(keyPath) ? File.ReadAllText(keyPath) : null;
+
+    if (keyPem is null)
+    {
+      cert = string.IsNullOrWhiteSpace(certPem) ? null : X509Certificate2.CreateFromPem(certPem);
+      return cert is not null;
+    }
+
+    cert = string.IsNullOrWhiteSpace(certPem) ? null : X509Certificate2.CreateFromPem(certPem, keyPem);
+    return cert is not null;
   }
 }

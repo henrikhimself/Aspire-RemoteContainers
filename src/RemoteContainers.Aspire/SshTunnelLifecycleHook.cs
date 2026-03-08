@@ -24,10 +24,10 @@ namespace Hj.RemoteContainers.Aspire;
 
 internal sealed class SshTunnelLifecycleHook : IDistributedApplicationEventingSubscriber
 {
-  private readonly ILogger<SshTunnelManager> _logger;
+  private readonly ILogger<SshTunnelLifecycleHook> _logger;
   private readonly SshTunnelManager _tunnelManager;
 
-  public SshTunnelLifecycleHook(ILogger<SshTunnelManager> logger, SshTunnelManager tunnelManager)
+  public SshTunnelLifecycleHook(ILogger<SshTunnelLifecycleHook> logger, SshTunnelManager tunnelManager)
   {
     _logger = logger;
     _tunnelManager = tunnelManager;
