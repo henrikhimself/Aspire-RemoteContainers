@@ -46,15 +46,22 @@ No changes are needed to your container resource definitions - the tunneling is 
 
 ### Required Environment Variables
 
-Add these in your Aspire AppHost `launchSettings.json`:
+Add this in your Aspire AppHost `launchSettings.json`:
 
 | Variable | Description |
 |---|---|
 | `DOCKER_HOST` | Remote Docker engine address, e.g. `tcp://my-server:2376`. Must use the `tcp://` scheme. |
-| `DOCKER_TLS_VERIFY` | Set to 1 to enable TLS. |
+
+### Optional Environment Variables (TLS)
+
+Set these if your remote Docker endpoint requires TLS:
+
+| Variable | Description |
+|---|---|
+| `DOCKER_TLS_VERIFY` | Set to `1` to enable TLS when connecting to `DOCKER_HOST`. |
 | `DOCKER_CERT_PATH` | Path to a directory containing `ca.pem`, `cert.pem`, and `key.pem` for mutual TLS authentication with the Docker API. |
 
-Example `launchSettings.json`:
+Example `launchSettings.json` with TLS enabled:
 
 ```json
 {
