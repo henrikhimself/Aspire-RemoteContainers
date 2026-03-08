@@ -14,10 +14,10 @@
 // limitations under the License.
 // </copyright>
 
+using System.Security.Cryptography.X509Certificates;
 using Aspire.Hosting;
 using Aspire.Hosting.Lifecycle;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Hj.RemoteContainers.Aspire;
 
@@ -32,33 +32,49 @@ public static class SshTunnelExtensions
   /// <returns>The application builder instance.</returns>
   public static IDistributedApplicationBuilder AddSshTunneling(this IDistributedApplicationBuilder builder)
   {
-    var dockerHost = Environment.GetEnvironmentVariable("DOCKER_HOST");
-    if (string.IsNullOrWhiteSpace(dockerHost))
+    var environmentUserName = Environment.UserName;
+    var environmentUserProfilePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    var environmentVariables = Environment.GetEnvironmentVariables();
+
+    AppConfiguration appConfiguration = new(builder.Configuration, environmentUserName, environmentUserProfilePath, environmentVariables);
+    if (!appConfiguration.HasDockerHost)
     {
+      // Skip setting up SSH tunnels.
       return builder;
     }
 
-    if (!builder.Services.Any(d => d.ServiceType == typeof(DockerApiClient)))
-    {
-      var tlsVerify = string.Equals(
-        Environment.GetEnvironmentVariable("DOCKER_TLS_VERIFY"), "1", StringComparison.Ordinal);
+    var services = builder.Services;
+    services.AddSingleton(appConfiguration);
 
-      builder.Services.AddHttpClient<DockerApiClient>(client =>
+    builder.Services.AddHttpClient<DockerApiClient>(httpClient =>
       {
-        if (!string.IsNullOrEmpty(dockerHost)
-          && dockerHost.StartsWith("tcp://", StringComparison.OrdinalIgnoreCase))
-        {
-          var scheme = tlsVerify ? "https://" : "http://";
-          client.BaseAddress = new Uri(
-            dockerHost.Replace("tcp://", scheme, StringComparison.OrdinalIgnoreCase));
-        }
+        httpClient.BaseAddress = appConfiguration.DockerHost.Uri;
       })
-      .ConfigurePrimaryHttpMessageHandler(() => DockerApiClient.CreateTlsHandler(tlsVerify))
-      .AddStandardResilienceHandler();
-    }
+      .ConfigurePrimaryHttpMessageHandler(() =>
+      {
+        var handler = new HttpClientHandler();
+        if (appConfiguration.TryGetDockerCertificate(out var caCert, out var clientCert))
+        {
+          handler.ClientCertificates.Add(clientCert);
+          handler.ServerCertificateCustomValidationCallback = (_, serverCert, chain, _) =>
+          {
+            if (serverCert is null || chain is null)
+            {
+              return false;
+            }
 
-    builder.Services.TryAddSingleton<SshTunnelManager>();
-    builder.Services.TryAddEventingSubscriber<SshTunnelLifecycleHook>();
+            chain.ChainPolicy.CustomTrustStore.Add(caCert);
+            chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+            return chain.Build(serverCert);
+          };
+        }
+
+        return handler;
+      })
+      .AddStandardResilienceHandler();
+
+    builder.Services.AddSingleton<SshTunnelManager>();
+    builder.Services.AddEventingSubscriber<SshTunnelLifecycleHook>();
 
     return builder;
   }

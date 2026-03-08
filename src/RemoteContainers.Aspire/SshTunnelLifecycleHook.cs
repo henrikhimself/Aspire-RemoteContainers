@@ -18,14 +18,20 @@ using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Eventing;
 using Aspire.Hosting.Lifecycle;
+using Microsoft.Extensions.Logging;
 
 namespace Hj.RemoteContainers.Aspire;
 
 internal sealed class SshTunnelLifecycleHook : IDistributedApplicationEventingSubscriber
 {
+  private readonly ILogger<SshTunnelManager> _logger;
   private readonly SshTunnelManager _tunnelManager;
 
-  public SshTunnelLifecycleHook(SshTunnelManager tunnelManager) => _tunnelManager = tunnelManager;
+  public SshTunnelLifecycleHook(ILogger<SshTunnelManager> logger, SshTunnelManager tunnelManager)
+  {
+    _logger = logger;
+    _tunnelManager = tunnelManager;
+  }
 
   public Task SubscribeAsync(IDistributedApplicationEventing eventing, DistributedApplicationExecutionContext executionContext, CancellationToken cancellationToken)
   {
@@ -41,6 +47,16 @@ internal sealed class SshTunnelLifecycleHook : IDistributedApplicationEventingSu
       return;
     }
 
-    await _tunnelManager.AddAllContainerPortForwardsAsync(evt.Resource.Name, cancellationToken);
+    try
+    {
+      await _tunnelManager.AddAllContainerPortForwardsAsync(evt.Resource.Name, cancellationToken);
+    }
+    catch (Exception ex)
+    {
+      if (_logger.IsEnabled(LogLevel.Error))
+      {
+        _logger.LogError(ex, "Failed to set up SSH tunnel");
+      }
+    }
   }
 }

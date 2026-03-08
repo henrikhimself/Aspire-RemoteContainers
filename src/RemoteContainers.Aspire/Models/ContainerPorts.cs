@@ -20,5 +20,5 @@ internal sealed record ContainerPorts
 {
   public required string Id { get; init; }
 
-  public required Dictionary<int, int> Ports { get; init; }
+  public required List<uint> Ports { get; init; }
 }

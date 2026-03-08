@@ -14,7 +14,7 @@
 // limitations under the License.
 // </copyright>
 
-using Microsoft.Extensions.Configuration;
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Renci.SshNet;
 
@@ -26,63 +26,19 @@ namespace Hj.RemoteContainers.Aspire;
 internal sealed class SshTunnelManager : IDisposable
 {
   private readonly ILogger<SshTunnelManager> _logger;
-  private readonly SshClient? _sshClient;
-  private readonly List<ForwardedPortLocal> _forwardedPorts = [];
-  private readonly object _lock = new();
-  private readonly PrivateKeyFile[]? _keyFiles;
+  private readonly AppConfiguration _appConfiguration;
   private readonly DockerApiClient _dockerApiClient;
+  private readonly Lazy<SshTunnelClient> _sshTunnelClient;
 
-  public SshTunnelManager(ILogger<SshTunnelManager> logger, IConfiguration configuration, DockerApiClient dockerApiClient)
+  private readonly ConcurrentBag<ForwardedPortLocal> _forwardedPorts = [];
+  private bool _disposedValue;
+
+  public SshTunnelManager(ILogger<SshTunnelManager> logger, AppConfiguration appConfiguration, DockerApiClient dockerApiClient)
   {
     _logger = logger;
+    _appConfiguration = appConfiguration;
     _dockerApiClient = dockerApiClient;
-
-    var remoteHost = dockerApiClient.RemoteHost;
-    var sshHost = configuration["SSH_HOST"];
-    var sshUser = configuration["SSH_USER"];
-
-    if (remoteHost is null)
-    {
-      _logger.LogInformation("SSH tunneling disabled - DOCKER_HOST is not a remote tcp:// address");
-      return;
-    }
-
-    if (string.IsNullOrEmpty(sshHost))
-    {
-      sshHost = remoteHost;
-    }
-
-    if (string.IsNullOrEmpty(sshUser))
-    {
-      sshUser = Environment.UserName;
-    }
-
-    try
-    {
-      if (_logger.IsEnabled(LogLevel.Information))
-      {
-        _logger.LogInformation("Connecting to SSH host {SshHost} as {SshUser}", sshHost, sshUser);
-      }
-
-      _keyFiles = LoadSshKeyFiles();
-      _sshClient = new SshClient(sshHost, sshUser, _keyFiles);
-      _sshClient.Connect();
-
-      if (_logger.IsEnabled(LogLevel.Information))
-      {
-        _logger.LogInformation("SSH connection established");
-      }
-    }
-    catch (Exception ex)
-    {
-      if (_logger.IsEnabled(LogLevel.Warning))
-      {
-        _logger.LogWarning(ex, "Failed to establish SSH connection - port forwarding disabled");
-      }
-
-      _sshClient?.Dispose();
-      _sshClient = null;
-    }
+    _sshTunnelClient = new Lazy<SshTunnelClient>(ConnectSshTunnelClient);
   }
 
   /// <summary>
@@ -93,139 +49,79 @@ internal sealed class SshTunnelManager : IDisposable
   /// <returns>A task.</returns>
   public async Task AddAllContainerPortForwardsAsync(string resourceName, CancellationToken cancellationToken)
   {
-    if (_sshClient is null || !_sshClient.IsConnected)
+    if (!_sshTunnelClient.Value.IsConnected)
     {
       return;
     }
 
     var portMappings = await _dockerApiClient.GetAllContainerHostPortsAsync(resourceName, cancellationToken);
-
     if (portMappings is null)
     {
       return;
     }
 
-    foreach (var (containerPort, hostPort) in portMappings)
+    foreach (var port in portMappings)
     {
-      AddPortForward((uint)hostPort, $"{resourceName} (container:{containerPort})");
+#pragma warning disable CA2000 // Dispose objects before losing scope
+      var isPortForwarded = _sshTunnelClient.Value.TryForwardPort(port, out var forwardedPort);
+#pragma warning restore CA2000 // Dispose objects before losing scope
+      if (forwardedPort is not null)
+      {
+        _forwardedPorts.Add(forwardedPort);
+      }
+
+      if (isPortForwarded)
+      {
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+          _logger.LogInformation(
+            "Port forwarded: localhost:{Port} → remote:{Port}",
+            port,
+            port);
+        }
+      }
+      else if (_logger.IsEnabled(LogLevel.Warning))
+      {
+        _logger.LogWarning(
+            "Failed to forward port: localhost:{Port} → remote:{Port}",
+            port,
+            port);
+      }
     }
   }
 
   public void Dispose()
   {
-    ForwardedPortLocal[] portsSnapshot;
-    lock (_lock)
-    {
-      portsSnapshot = [.. _forwardedPorts];
-      _forwardedPorts.Clear();
-    }
-
-    foreach (var port in portsSnapshot)
-    {
-      try
-      {
-        port.Stop();
-        port.Dispose();
-      }
-      catch
-      {
-        // Best effort cleanup
-      }
-    }
-
-    _sshClient?.Disconnect();
-    _sshClient?.Dispose();
-
-    if (_keyFiles is not null)
-    {
-      foreach (var keyFile in _keyFiles)
-      {
-        keyFile.Dispose();
-      }
-    }
-
-    if (_logger.IsEnabled(LogLevel.Information))
-    {
-      _logger.LogInformation("SSH tunnels closed");
-    }
+    Dispose(disposing: true);
+    GC.SuppressFinalize(this);
   }
 
-  private static PrivateKeyFile[] LoadSshKeyFiles()
+  private void Dispose(bool disposing)
   {
-    var homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-    var sshDir = Path.Combine(homeDir, ".ssh");
-
-    // Try common SSH key locations
-    var keyPaths = new[]
+    if (!_disposedValue)
     {
-      Path.Combine(sshDir, "id_rsa"),
-      Path.Combine(sshDir, "id_ed25519"),
-      Path.Combine(sshDir, "id_ecdsa"),
-    };
-
-    var keys = new List<PrivateKeyFile>();
-
-    foreach (var keyPath in keyPaths)
-    {
-      if (File.Exists(keyPath))
+      if (disposing)
       {
-        try
+        while (_forwardedPorts.TryTake(out var forwardedPort))
         {
-          keys.Add(new PrivateKeyFile(keyPath));
+          try
+          {
+            forwardedPort.Stop();
+            forwardedPort.Dispose();
+          }
+          catch
+          {
+            // Best effort cleanup
+          }
         }
-        catch
-        {
-          // Key might be encrypted or invalid, skip it
-        }
+
+        _sshTunnelClient.Value.Dispose();
       }
-    }
 
-    if (keys.Count == 0)
-    {
-      throw new InvalidOperationException(
-        $"No SSH private keys found in {sshDir}. Ensure you have id_rsa, id_ed25519, or id_ecdsa.");
+      _disposedValue = true;
     }
-
-    return [.. keys];
   }
 
-  /// <summary>
-  /// Creates a port forward from local port to remote localhost:port through the SSH tunnel.
-  /// </summary>
-  private void AddPortForward(uint port, string description)
-  {
-    if (_sshClient is null || !_sshClient.IsConnected)
-    {
-      return;
-    }
-
-    lock (_lock)
-    {
-      ForwardedPortLocal? forwardedPort = null;
-      try
-      {
-        forwardedPort = new ForwardedPortLocal("127.0.0.1", port, "127.0.0.1", port);
-        _sshClient.AddForwardedPort(forwardedPort);
-        forwardedPort.Start();
-
-        _forwardedPorts.Add(forwardedPort);
-        if (_logger.IsEnabled(LogLevel.Information))
-        {
-          _logger.LogInformation(
-            "Port forward established: localhost:{LocalPort} → remote:{RemotePort} ({Description})",
-            port,
-            port,
-            description);
-        }
-      }
-      catch (Exception ex)
-      {
-        forwardedPort?.Dispose();
-        if (_logger.IsEnabled(LogLevel.Warning))
-        {
-          _logger.LogWarning(ex, "Failed to create port forward for {Port} ({Description})", port, description);
-        }
-      }
-    }
-  }
+  private SshTunnelClient ConnectSshTunnelClient()
+    => SshTunnelClient.Connect(_appConfiguration.SshKeyPath, _appConfiguration.SshHost, _appConfiguration.SshUser);
 }

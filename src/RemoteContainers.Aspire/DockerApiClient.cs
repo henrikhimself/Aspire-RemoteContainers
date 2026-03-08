@@ -14,8 +14,6 @@
 // limitations under the License.
 // </copyright>
 
-using System.Diagnostics.CodeAnalysis;
-using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Hj.RemoteContainers.Aspire.Models;
 using Microsoft.Extensions.Logging;
@@ -32,16 +30,12 @@ internal sealed class DockerApiClient
 
   private readonly ILogger<DockerApiClient> _logger;
   private readonly HttpClient _httpClient;
-  private readonly bool _isEnabled;
 
   public DockerApiClient(ILogger<DockerApiClient> logger, HttpClient httpClient)
   {
     _logger = logger;
     _httpClient = httpClient;
-    _isEnabled = httpClient.BaseAddress is not null;
   }
-
-  internal string? RemoteHost => _httpClient.BaseAddress?.Host;
 
   /// <summary>
   /// Polls until the named container is running and returns ALL its published port mappings, or null if the container
@@ -63,13 +57,8 @@ internal sealed class DockerApiClient
   /// <returns>
   /// A dictionary mapping container port → Docker host port, or null when disabled or timed out.
   /// </returns>
-  public async Task<IReadOnlyDictionary<int, int>?> GetAllContainerHostPortsAsync(string resourceName, CancellationToken cancellationToken)
+  public async Task<List<uint>?> GetAllContainerHostPortsAsync(string resourceName, CancellationToken cancellationToken)
   {
-    if (!_isEnabled)
-    {
-      return null;
-    }
-
     var deadline = DateTime.UtcNow + _containerStartTimeout;
     string? lastSeenId = null;
     var isFirstPoll = true;
@@ -79,7 +68,6 @@ internal sealed class DockerApiClient
       try
       {
         var result = await TryQueryAllContainerHostPortsAsync(resourceName, cancellationToken);
-
         if (result is not null)
         {
           if (isFirstPoll)
@@ -93,7 +81,12 @@ internal sealed class DockerApiClient
 
           if (lastSeenId is null || result.Id == lastSeenId)
           {
-            // Either appeared after an empty poll (definitely new) or confirmed stable across two consecutive polls. Accept.
+            // Either appeared after an empty poll (definitely new) or confirmed stable across two consecutive polls.
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+              _logger.LogInformation("Resolved Docker port: {ResourceName}: {Port}", resourceName, string.Join(",", result.Ports));
+            }
+
             return result.Ports;
           }
 
@@ -116,16 +109,6 @@ internal sealed class DockerApiClient
 
         lastSeenId = null;
         isFirstPoll = false;
-        await Task.Delay(_containerPollInterval, cancellationToken);
-        continue;
-      }
-
-      if (_logger.IsEnabled(LogLevel.Debug))
-      {
-        _logger.LogDebug(
-          "Container {ResourceName} not yet visible in Docker; retrying in {Interval}ms…",
-          resourceName,
-          _containerPollInterval.TotalMilliseconds);
       }
 
       await Task.Delay(_containerPollInterval, cancellationToken);
@@ -140,52 +123,6 @@ internal sealed class DockerApiClient
     }
 
     return null;
-  }
-
-  /// <summary>
-  /// Creates the <see cref="HttpClientHandler"/> for the Docker API. Loads mutual TLS certificates
-  /// from DOCKER_CERT_PATH when TLS verification is enabled.
-  /// Throws <see cref="InvalidOperationException"/> if DOCKER_CERT_PATH is not set.
-  /// </summary>
-  /// <param name="tlsVerify">Whether DOCKER_TLS_VERIFY is enabled.</param>
-  /// <returns>A http client handler configured to use a client certificate.</returns>
-  [SuppressMessage(
-    "Reliability",
-    "CA2000:Dispose objects before losing scope",
-    Justification = "Certificates are app-lifetime objects: clientCert is owned by ClientCertificates, caCert is captured by the validation callback. Both live until process exit.")]
-  internal static HttpClientHandler CreateTlsHandler(bool tlsVerify)
-  {
-    if (!tlsVerify)
-    {
-      return new HttpClientHandler();
-    }
-
-    var certPath = Environment.GetEnvironmentVariable("DOCKER_CERT_PATH")
-      ?? throw new InvalidOperationException(
-        "DOCKER_CERT_PATH must be set in the environment when DOCKER_TLS_VERIFY=1.");
-
-    var caCert = X509Certificate2.CreateFromPem(
-      File.ReadAllText(Path.Combine(certPath, "ca.pem")));
-
-    var clientCert = X509Certificate2.CreateFromPem(
-      File.ReadAllText(Path.Combine(certPath, "cert.pem")),
-      File.ReadAllText(Path.Combine(certPath, "key.pem")));
-
-    var handler = new HttpClientHandler();
-    handler.ClientCertificates.Add(clientCert);
-    handler.ServerCertificateCustomValidationCallback = (_, serverCert, chain, _) =>
-    {
-      if (serverCert is null || chain is null)
-      {
-        return false;
-      }
-
-      chain.ChainPolicy.CustomTrustStore.Add(caCert);
-      chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-      return chain.Build(serverCert);
-    };
-
-    return handler;
   }
 
   private async Task<ContainerPorts?> TryQueryAllContainerHostPortsAsync(string resourceName, CancellationToken cancellationToken)
@@ -218,8 +155,7 @@ internal sealed class DockerApiClient
 
         // Docker API returns names with a leading "/" — strip it before comparing.
         var name = rawName.AsSpan().TrimStart('/');
-        if (name.Equals(resourceName, StringComparison.OrdinalIgnoreCase)
-          || name.StartsWith(resourcePrefix, StringComparison.OrdinalIgnoreCase))
+        if (name.Equals(resourceName, StringComparison.OrdinalIgnoreCase) || name.StartsWith(resourcePrefix, StringComparison.OrdinalIgnoreCase))
         {
           matched = true;
           break;
@@ -232,40 +168,24 @@ internal sealed class DockerApiClient
       }
 
       var containerId = container.TryGetProperty("Id", out var idProp) ? idProp.GetString() ?? string.Empty : string.Empty;
-
       if (!container.TryGetProperty("Ports", out var ports))
       {
         continue;
       }
 
-      var portMappings = new Dictionary<int, int>();
-
-      foreach (var port in ports.EnumerateArray())
+      var portMappings = new List<uint>();
+      foreach (var portElement in ports.EnumerateArray())
       {
-        if (port.TryGetProperty("PrivatePort", out var priv)
-          && priv.TryGetInt32(out var privPort)
-          && port.TryGetProperty("PublicPort", out var pub)
-          && pub.TryGetInt32(out var hostPort)
-          && hostPort > 0)
+        if (portElement.TryGetProperty("PublicPort", out var publicPort)
+          && publicPort.TryGetUInt32(out var port)
+          && port > 0)
         {
-          portMappings[privPort] = hostPort;
+          portMappings.Add(port);
         }
       }
 
       if (portMappings.Count > 0)
       {
-        if (_logger.IsEnabled(LogLevel.Information))
-        {
-          foreach (var (containerPort, hostPort) in portMappings)
-          {
-            _logger.LogInformation(
-              "Resolved Docker host port: {ResourceName} container:{ContainerPort} → host:{HostPort}",
-              resourceName,
-              containerPort,
-              hostPort);
-          }
-        }
-
         return new ContainerPorts()
         {
           Id = containerId,
