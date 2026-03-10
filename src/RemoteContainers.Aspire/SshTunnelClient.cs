@@ -1,5 +1,5 @@
 // <copyright file="SshTunnelClient.cs" company="Henrik Jensen">
-// Copyright 2025 Henrik Jensen
+// Copyright 2026 Henrik Jensen
 //
 // Licensed under the Apache License, Version 2.0 (the "License")
 // you may not use this file except in compliance with the License.
@@ -14,25 +14,50 @@
 // limitations under the License.
 // </copyright>
 
+using System.Diagnostics.CodeAnalysis;
 using Renci.SshNet;
 
 namespace Hj.RemoteContainers.Aspire;
 
 internal sealed class SshTunnelClient : IDisposable
 {
-  private readonly List<PrivateKeyFile> _keyFiles;
+  private readonly AppConfiguration _appConfiguration;
 
-  private readonly SshClient _sshClient;
+  private List<PrivateKeyFile>? _keyFiles;
+  private SshClient? _sshClient;
 
   private bool _disposedValue;
 
-  private SshTunnelClient(List<PrivateKeyFile> keyFiles, SshClient sshClient)
-  {
-    _keyFiles = keyFiles;
-    _sshClient = sshClient;
-  }
+  public SshTunnelClient(AppConfiguration appConfiguration) => _appConfiguration = appConfiguration;
 
-  internal bool IsConnected => _sshClient.IsConnected;
+  [MemberNotNullWhen(true, nameof(_sshClient))]
+  public bool IsConnected => _sshClient?.IsConnected ?? false;
+
+  public void Connect()
+  {
+    var keyDir = _appConfiguration.SshKeyPath;
+    if (!Directory.Exists(keyDir))
+    {
+      throw new InvalidOperationException($"SSH key path '{keyDir}' does not exist.");
+    }
+
+    _keyFiles = LoadSshKeyFiles(keyDir);
+    if (_keyFiles.Count == 0)
+    {
+      throw new InvalidOperationException("No SSH private keys found.");
+    }
+
+    _sshClient = new SshClient(_appConfiguration.SshHost, _appConfiguration.SshUser, [.. _keyFiles]);
+    try
+    {
+      _sshClient.Connect();
+    }
+    catch
+    {
+      Dispose();
+      throw;
+    }
+  }
 
   public void Dispose()
   {
@@ -40,54 +65,27 @@ internal sealed class SshTunnelClient : IDisposable
     GC.SuppressFinalize(this);
   }
 
-  internal static SshTunnelClient Connect(string keyDir, string sshHost, string sshUser)
-  {
-    if (!Directory.Exists(keyDir))
-    {
-      throw new InvalidOperationException($"SSH key path '{keyDir}' does not exist.");
-    }
-
-    var keyFiles = LoadSshKeyFiles(keyDir);
-    if (keyFiles.Count == 0)
-    {
-      throw new InvalidOperationException("No SSH private keys found.");
-    }
-
-    var sshClient = ConnectSshClient(keyFiles, sshHost, sshUser);
-    return new(keyFiles, sshClient);
-  }
-
-  internal bool TryForwardPort(uint port, out ForwardedPortLocal? forwardedPort)
+  [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "See Dispose()")]
+  public bool TryForwardPort(uint port, out ForwardedPortLocal? forwardedPort)
   {
     forwardedPort = null;
+
+    if (!IsConnected)
+    {
+      return false;
+    }
+
     try
     {
-#pragma warning disable CA2000 // Dispose objects before losing scope
       forwardedPort = new ForwardedPortLocal("127.0.0.1", port, "127.0.0.1", port);
-#pragma warning restore CA2000 // Dispose objects before losing scope
       _sshClient.AddForwardedPort(forwardedPort);
       forwardedPort.Start();
       return true;
     }
-    catch (Exception)
+    catch
     {
       forwardedPort?.Dispose();
       forwardedPort = null;
-      return false;
-    }
-  }
-
-  private static SshClient ConnectSshClient(List<PrivateKeyFile> keyFiles, string sshHost, string sshUser)
-  {
-    var sshClient = new SshClient(sshHost, sshUser, [.. keyFiles]);
-    try
-    {
-      sshClient.Connect();
-      return sshClient;
-    }
-    catch (Exception)
-    {
-      sshClient.Dispose();
       throw;
     }
   }
@@ -126,12 +124,14 @@ internal sealed class SshTunnelClient : IDisposable
     {
       if (disposing)
       {
-        _sshClient.Disconnect();
-        _sshClient.Dispose();
+        _sshClient?.Dispose();
 
-        foreach (var keyFile in _keyFiles)
+        if (_keyFiles is not null)
         {
-          keyFile.Dispose();
+          foreach (var keyFile in _keyFiles)
+          {
+            keyFile.Dispose();
+          }
         }
       }
 

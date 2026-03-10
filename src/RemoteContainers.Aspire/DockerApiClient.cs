@@ -1,5 +1,5 @@
 // <copyright file="DockerApiClient.cs" company="Henrik Jensen">
-// Copyright 2025 Henrik Jensen
+// Copyright 2026 Henrik Jensen
 //
 // Licensed under the Apache License, Version 2.0 (the "License")
 // you may not use this file except in compliance with the License.
@@ -55,7 +55,7 @@ internal sealed class DockerApiClient
   /// <param name="resourceName">A resource name for which remote container ports will be retrieved.</param>
   /// <param name="cancellationToken">A cancellation token.</param>
   /// <returns>
-  /// A dictionary mapping container port → Docker host port, or null when disabled or timed out.
+  /// A list of published host ports, or null when timed out.
   /// </returns>
   public async Task<List<uint>?> GetAllContainerHostPortsAsync(string resourceName, CancellationToken cancellationToken)
   {
@@ -102,9 +102,9 @@ internal sealed class DockerApiClient
       }
       catch (HttpRequestException ex)
       {
-        if (_logger.IsEnabled(LogLevel.Debug))
+        if (_logger.IsEnabled(LogLevel.Error))
         {
-          _logger.LogDebug(ex, "Docker API request failed for {ResourceName}; retrying…", resourceName);
+          _logger.LogError(ex, "Docker API request failed for {ResourceName}; retrying…", resourceName);
         }
 
         lastSeenId = null;

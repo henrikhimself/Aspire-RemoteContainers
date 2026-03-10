@@ -1,5 +1,5 @@
 // <copyright file="AppConfiguration.cs" company="Henrik Jensen">
-// Copyright 2025 Henrik Jensen
+// Copyright 2026 Henrik Jensen
 //
 // Licensed under the Apache License, Version 2.0 (the "License")
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
-using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Configuration;
 
 namespace Hj.RemoteContainers.Aspire;
@@ -83,48 +82,8 @@ internal sealed class AppConfiguration
 
   [MemberNotNullWhen(true, nameof(DockerCertPath))]
   public bool IsDockerTls =>
-    string.Equals((string?)_environmentVariables["DOCKER_TLS_VERIFY"], "1", StringComparison.Ordinal)
-    && !string.IsNullOrWhiteSpace(DockerCertPath);
+    !string.IsNullOrWhiteSpace(DockerCertPath)
+    && string.Equals((string?)_environmentVariables["DOCKER_TLS_VERIFY"], "1", StringComparison.Ordinal);
 
   public string? DockerCertPath => (string?)_environmentVariables["DOCKER_CERT_PATH"];
-
-  public bool TryGetDockerCertificate([NotNullWhen(true)] out X509Certificate2? caCert, [NotNullWhen(true)] out X509Certificate2? clientCert)
-  {
-    caCert = null;
-    clientCert = null;
-
-    if (!IsDockerTls)
-    {
-      return false;
-    }
-
-    if (!TryCreateCertificate(Path.Combine(DockerCertPath, "ca.pem"), null, out caCert))
-    {
-      return false;
-    }
-
-    if (!TryCreateCertificate(Path.Combine(DockerCertPath, "cert.pem"), Path.Combine(DockerCertPath, "key.pem"), out clientCert))
-    {
-      caCert.Dispose();
-      return false;
-    }
-
-    return true;
-  }
-
-  [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Disposed elsewhere")]
-  private static bool TryCreateCertificate(string certPath, string? keyPath, [NotNullWhen(true)] out X509Certificate2? cert)
-  {
-    var certPem = File.Exists(certPath) ? File.ReadAllText(certPath) : null;
-    var keyPem = File.Exists(keyPath) ? File.ReadAllText(keyPath) : null;
-
-    if (keyPem is null)
-    {
-      cert = string.IsNullOrWhiteSpace(certPem) ? null : X509Certificate2.CreateFromPem(certPem);
-      return cert is not null;
-    }
-
-    cert = string.IsNullOrWhiteSpace(certPem) ? null : X509Certificate2.CreateFromPem(certPem, keyPem);
-    return cert is not null;
-  }
 }

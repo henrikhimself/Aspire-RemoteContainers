@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Authors>Henrik Jensen</Authors>
-    <Copyright>Copyright 2025 Henrik Jensen</Copyright>
+    <Copyright>Copyright 2026 Henrik Jensen</Copyright>
     <PackageProjectUrl>https://github.com/henrikhimself/Aspire-RemoteContainers</PackageProjectUrl>
     <RepositoryUrl>https://github.com/henrikhimself/Aspire-RemoteContainers.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

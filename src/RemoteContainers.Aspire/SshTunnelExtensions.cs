@@ -1,5 +1,5 @@
 // <copyright file="SshTunnelExtensions.cs" company="Henrik Jensen">
-// Copyright 2025 Henrik Jensen
+// Copyright 2026 Henrik Jensen
 //
 // Licensed under the Apache License, Version 2.0 (the "License")
 // you may not use this file except in compliance with the License.
@@ -32,50 +32,56 @@ public static class SshTunnelExtensions
   /// <returns>The application builder instance.</returns>
   public static IDistributedApplicationBuilder AddSshTunneling(this IDistributedApplicationBuilder builder)
   {
+    var services = builder.Services;
+
     var environmentUserName = Environment.UserName;
     var environmentUserProfilePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     var environmentVariables = Environment.GetEnvironmentVariables();
-
     AppConfiguration appConfiguration = new(builder.Configuration, environmentUserName, environmentUserProfilePath, environmentVariables);
+
     if (!appConfiguration.HasDockerHost)
     {
       // Skip setting up SSH tunnels.
       return builder;
     }
 
-    var services = builder.Services;
-    services.AddSingleton(appConfiguration);
-
-    builder.Services.AddHttpClient<DockerApiClient>(httpClient =>
+    services.AddHttpClient<DockerApiClient>(httpClient =>
       {
         httpClient.BaseAddress = appConfiguration.DockerHost.Uri;
       })
-      .ConfigurePrimaryHttpMessageHandler(() =>
-      {
-        var handler = new HttpClientHandler();
-        if (appConfiguration.TryGetDockerCertificate(out var caCert, out var clientCert))
-        {
-          handler.ClientCertificates.Add(clientCert);
-          handler.ServerCertificateCustomValidationCallback = (_, serverCert, chain, _) =>
-          {
-            if (serverCert is null || chain is null)
-            {
-              return false;
-            }
-
-            chain.ChainPolicy.CustomTrustStore.Add(caCert);
-            chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-            return chain.Build(serverCert);
-          };
-        }
-
-        return handler;
-      })
+      .ConfigurePrimaryHttpMessageHandler(CreateHttpMessageHandler)
       .AddStandardResilienceHandler();
 
-    builder.Services.AddSingleton<SshTunnelManager>();
-    builder.Services.AddEventingSubscriber<SshTunnelLifecycleHook>();
+    services
+      .AddSingleton(appConfiguration)
+      .AddSingleton<DockerCertificate>()
+      .AddSingleton<SshTunnelClient>()
+      .AddSingleton<SshTunnelManager>()
+      .AddEventingSubscriber<SshTunnelLifecycleHook>();
 
     return builder;
+  }
+
+  private static HttpMessageHandler CreateHttpMessageHandler(IServiceProvider sp)
+  {
+    var handler = new HttpClientHandler();
+    var dockerCert = sp.GetRequiredService<DockerCertificate>();
+    if (dockerCert.TryGetCertificate(out var caCert, out var clientCert))
+    {
+      handler.ClientCertificates.Add(clientCert);
+      handler.ServerCertificateCustomValidationCallback = (_, serverCert, chain, _) =>
+      {
+        if (serverCert is null || chain is null)
+        {
+          return false;
+        }
+
+        chain.ChainPolicy.CustomTrustStore.Add(caCert);
+        chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+        return chain.Build(serverCert);
+      };
+    }
+
+    return handler;
   }
 }

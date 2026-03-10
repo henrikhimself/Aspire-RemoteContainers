@@ -1,5 +1,5 @@
 // <copyright file="SshTunnelLifecycleHook.cs" company="Henrik Jensen">
-// Copyright 2025 Henrik Jensen
+// Copyright 2026 Henrik Jensen
 //
 // Licensed under the Apache License, Version 2.0 (the "License")
 // you may not use this file except in compliance with the License.
@@ -36,13 +36,18 @@ internal sealed class SshTunnelLifecycleHook : IDistributedApplicationEventingSu
   public Task SubscribeAsync(IDistributedApplicationEventing eventing, DistributedApplicationExecutionContext executionContext, CancellationToken cancellationToken)
   {
     eventing.Subscribe<ResourceEndpointsAllocatedEvent>(SetUpTunnelAsync);
+    eventing.Subscribe<ResourceReadyEvent>(SetUpTunnelOnReadyAsync);
+    eventing.Subscribe<ResourceStoppedEvent>(TearDownTunnel);
+
     return Task.CompletedTask;
   }
 
+  private static bool IsContainerResource(IResource resource) =>
+    resource.Annotations.OfType<ContainerImageAnnotation>().Any();
+
   private async Task SetUpTunnelAsync(ResourceEndpointsAllocatedEvent evt, CancellationToken cancellationToken)
   {
-    // Only tunnel container resources.
-    if (!evt.Resource.Annotations.OfType<ContainerImageAnnotation>().Any())
+    if (!IsContainerResource(evt.Resource))
     {
       return;
     }
@@ -55,8 +60,52 @@ internal sealed class SshTunnelLifecycleHook : IDistributedApplicationEventingSu
     {
       if (_logger.IsEnabled(LogLevel.Error))
       {
-        _logger.LogError(ex, "Failed to set up SSH tunnel");
+        _logger.LogError(ex, "Failed to set up SSH tunnel for resource {ResourceName}", evt.Resource.Name);
       }
     }
+  }
+
+  private async Task SetUpTunnelOnReadyAsync(ResourceReadyEvent evt, CancellationToken cancellationToken)
+  {
+    if (!IsContainerResource(evt.Resource))
+    {
+      return;
+    }
+
+    try
+    {
+      // Remove stale tunnels from the previous run of this resource before creating new ones.
+      _tunnelManager.RemoveAllContainerPortForwards(evt.Resource.Name);
+      await _tunnelManager.AddAllContainerPortForwardsAsync(evt.Resource.Name, cancellationToken);
+    }
+    catch (Exception ex)
+    {
+      if (_logger.IsEnabled(LogLevel.Error))
+      {
+        _logger.LogError(ex, "Failed to re-establish SSH tunnel for resource {ResourceName}", evt.Resource.Name);
+      }
+    }
+  }
+
+  private Task TearDownTunnel(ResourceStoppedEvent evt, CancellationToken cancellationToken)
+  {
+    if (!IsContainerResource(evt.Resource))
+    {
+      return Task.CompletedTask;
+    }
+
+    try
+    {
+      _tunnelManager.RemoveAllContainerPortForwards(evt.Resource.Name);
+    }
+    catch (Exception ex)
+    {
+      if (_logger.IsEnabled(LogLevel.Error))
+      {
+        _logger.LogError(ex, "Failed to tear down SSH tunnel for resource {ResourceName}", evt.Resource.Name);
+      }
+    }
+
+    return Task.CompletedTask;
   }
 }

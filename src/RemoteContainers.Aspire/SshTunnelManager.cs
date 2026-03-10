@@ -1,5 +1,5 @@
 // <copyright file="SshTunnelManager.cs" company="Henrik Jensen">
-// Copyright 2025 Henrik Jensen
+// Copyright 2026 Henrik Jensen
 //
 // Licensed under the Apache License, Version 2.0 (the "License")
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 // </copyright>
 
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Renci.SshNet;
 
@@ -26,19 +27,24 @@ namespace Hj.RemoteContainers.Aspire;
 internal sealed class SshTunnelManager : IDisposable
 {
   private readonly ILogger<SshTunnelManager> _logger;
-  private readonly AppConfiguration _appConfiguration;
   private readonly DockerApiClient _dockerApiClient;
   private readonly Lazy<SshTunnelClient> _sshTunnelClient;
 
-  private readonly ConcurrentBag<ForwardedPortLocal> _forwardedPorts = [];
+  private readonly ConcurrentDictionary<string, ConcurrentBag<ForwardedPortLocal>> _forwardedPortsByResource = new();
   private bool _disposedValue;
 
-  public SshTunnelManager(ILogger<SshTunnelManager> logger, AppConfiguration appConfiguration, DockerApiClient dockerApiClient)
+  public SshTunnelManager(
+    ILogger<SshTunnelManager> logger,
+    SshTunnelClient sshTunnelClient,
+    DockerApiClient dockerApiClient)
   {
     _logger = logger;
-    _appConfiguration = appConfiguration;
     _dockerApiClient = dockerApiClient;
-    _sshTunnelClient = new Lazy<SshTunnelClient>(ConnectSshTunnelClient);
+    _sshTunnelClient = new Lazy<SshTunnelClient>(() =>
+    {
+      sshTunnelClient.Connect();
+      return sshTunnelClient;
+    });
   }
 
   /// <summary>
@@ -47,6 +53,7 @@ internal sealed class SshTunnelManager : IDisposable
   /// <param name="resourceName">A resource name for which remote container ports will be retrieved.</param>
   /// <param name="cancellationToken">A cancellation token.</param>
   /// <returns>A task.</returns>
+  [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "See Dispose()")]
   public async Task AddAllContainerPortForwardsAsync(string resourceName, CancellationToken cancellationToken)
   {
     if (!_sshTunnelClient.Value.IsConnected)
@@ -60,32 +67,59 @@ internal sealed class SshTunnelManager : IDisposable
       return;
     }
 
+    var resourcePorts = _forwardedPortsByResource.GetOrAdd(resourceName, _ => []);
+
     foreach (var port in portMappings)
     {
-#pragma warning disable CA2000 // Dispose objects before losing scope
       var isPortForwarded = _sshTunnelClient.Value.TryForwardPort(port, out var forwardedPort);
-#pragma warning restore CA2000 // Dispose objects before losing scope
       if (forwardedPort is not null)
       {
-        _forwardedPorts.Add(forwardedPort);
+        resourcePorts.Add(forwardedPort);
       }
 
       if (isPortForwarded)
       {
         if (_logger.IsEnabled(LogLevel.Information))
         {
-          _logger.LogInformation(
-            "Port forwarded: localhost:{Port} → remote:{Port}",
-            port,
-            port);
+          _logger.LogInformation("SSH tunnel created for {ResourceName} port {Port}", resourceName, port);
         }
       }
       else if (_logger.IsEnabled(LogLevel.Warning))
       {
-        _logger.LogWarning(
-            "Failed to forward port: localhost:{Port} → remote:{Port}",
-            port,
-            port);
+        _logger.LogWarning("Failed to forward port {Port} for {ResourceName}", port, resourceName);
+      }
+    }
+  }
+
+  /// <summary>
+  /// Stops and disposes all SSH tunnels associated with the specified resource.
+  /// </summary>
+  /// <param name="resourceName">The resource name whose tunnels should be removed.</param>
+  public void RemoveAllContainerPortForwards(string resourceName)
+  {
+    if (!_forwardedPortsByResource.TryRemove(resourceName, out var ports))
+    {
+      return;
+    }
+
+    while (ports.TryTake(out var forwardedPort))
+    {
+      try
+      {
+        forwardedPort.Stop();
+        forwardedPort.Dispose();
+
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+          _logger.LogInformation("SSH tunnel removed for {ResourceName} port {Port}", resourceName, forwardedPort.BoundPort);
+        }
+      }
+      catch (Exception ex)
+      {
+        if (_logger.IsEnabled(LogLevel.Warning))
+        {
+          _logger.LogWarning(ex, "Failed to clean up SSH tunnel for {ResourceName} port {Port}", resourceName, forwardedPort.BoundPort);
+        }
       }
     }
   }
@@ -102,17 +136,9 @@ internal sealed class SshTunnelManager : IDisposable
     {
       if (disposing)
       {
-        while (_forwardedPorts.TryTake(out var forwardedPort))
+        foreach (var resourceName in _forwardedPortsByResource.Keys)
         {
-          try
-          {
-            forwardedPort.Stop();
-            forwardedPort.Dispose();
-          }
-          catch
-          {
-            // Best effort cleanup
-          }
+          RemoveAllContainerPortForwards(resourceName);
         }
 
         if (_sshTunnelClient.IsValueCreated)
@@ -124,7 +150,4 @@ internal sealed class SshTunnelManager : IDisposable
       _disposedValue = true;
     }
   }
-
-  private SshTunnelClient ConnectSshTunnelClient()
-    => SshTunnelClient.Connect(_appConfiguration.SshKeyPath, _appConfiguration.SshHost, _appConfiguration.SshUser);
 }
