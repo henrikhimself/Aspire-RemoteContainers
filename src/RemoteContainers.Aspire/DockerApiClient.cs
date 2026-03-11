@@ -189,7 +189,7 @@ internal sealed class DockerApiClient
         return new ContainerPorts()
         {
           Id = containerId,
-          Ports = portMappings,
+          Ports = [.. portMappings.Distinct()],
         };
       }
     }

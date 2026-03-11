@@ -66,28 +66,27 @@ internal sealed class SshTunnelClient : IDisposable
   }
 
   [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "See Dispose()")]
-  public bool TryForwardPort(uint port, out ForwardedPortLocal? forwardedPort)
+  public ForwardedPortLocal ForwardPort(uint port)
   {
-    forwardedPort = null;
-
     if (!IsConnected)
     {
-      return false;
+      throw new InvalidOperationException("SSH client is not connected");
     }
 
+    ForwardedPortLocal? forwardedPort = null;
     try
     {
       forwardedPort = new ForwardedPortLocal("127.0.0.1", port, "127.0.0.1", port);
       _sshClient.AddForwardedPort(forwardedPort);
       forwardedPort.Start();
-      return true;
     }
     catch
     {
       forwardedPort?.Dispose();
-      forwardedPort = null;
       throw;
     }
+
+    return forwardedPort;
   }
 
   private static List<PrivateKeyFile> LoadSshKeyFiles(string keyDir)

@@ -71,22 +71,12 @@ internal sealed class SshTunnelManager : IDisposable
 
     foreach (var port in portMappings)
     {
-      var isPortForwarded = _sshTunnelClient.Value.TryForwardPort(port, out var forwardedPort);
-      if (forwardedPort is not null)
-      {
-        resourcePorts.Add(forwardedPort);
-      }
+      var forwardedPort = _sshTunnelClient.Value.ForwardPort(port);
+      resourcePorts.Add(forwardedPort);
 
-      if (isPortForwarded)
+      if (_logger.IsEnabled(LogLevel.Information))
       {
-        if (_logger.IsEnabled(LogLevel.Information))
-        {
-          _logger.LogInformation("SSH tunnel created for {ResourceName} port {Port}", resourceName, port);
-        }
-      }
-      else if (_logger.IsEnabled(LogLevel.Warning))
-      {
-        _logger.LogWarning("Failed to forward port {Port} for {ResourceName}", port, resourceName);
+        _logger.LogInformation("SSH tunnel created for {ResourceName} port {Port}", resourceName, forwardedPort.Port);
       }
     }
   }
