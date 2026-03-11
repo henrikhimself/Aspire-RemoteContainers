@@ -14,7 +14,7 @@
 // limitations under the License.
 // </copyright>
 
-namespace Hj.RemoteContainers.Aspire.Models;
+namespace Hj.RemoteContainers.Aspire.Docker;
 
 internal sealed record ContainerPorts
 {

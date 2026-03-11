@@ -18,21 +18,23 @@ using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 
-namespace Hj.RemoteContainers.Aspire;
+namespace Hj.RemoteContainers.Aspire.Docker;
 
 internal sealed class DockerCertificate : IDisposable
 {
   private readonly ILogger<DockerCertificate> _logger;
   private readonly AppConfiguration _appConfiguration;
+  private readonly IFileSystem _fileSystem;
 
   private X509Certificate2? _caCert;
   private X509Certificate2? _clientCert;
   private bool _disposedValue;
 
-  public DockerCertificate(ILogger<DockerCertificate> logger, AppConfiguration appConfiguration)
+  public DockerCertificate(ILogger<DockerCertificate> logger, AppConfiguration appConfiguration, IFileSystem fileSystem)
   {
     _logger = logger;
     _appConfiguration = appConfiguration;
+    _fileSystem = fileSystem;
   }
 
   [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Disposed by caller")]
@@ -83,11 +85,18 @@ internal sealed class DockerCertificate : IDisposable
     GC.SuppressFinalize(this);
   }
 
-  [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Disposed by caller")]
-  private static bool TryCreateCertificate(string certPath, string? keyPath, [NotNullWhen(true)] out X509Certificate2? cert)
+  private static X509Certificate2 Clone(X509Certificate2 cert)
   {
-    var certPem = File.Exists(certPath) ? File.ReadAllText(certPath) : null;
-    var keyPem = File.Exists(keyPath) ? File.ReadAllText(keyPath) : null;
+    var keyStorageFlags = X509KeyStorageFlags.Exportable | X509KeyStorageFlags.PersistKeySet;
+    var pfxBytes = cert.Export(X509ContentType.Pkcs12, string.Empty);
+    return X509CertificateLoader.LoadPkcs12(pfxBytes, string.Empty, keyStorageFlags);
+  }
+
+  [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Disposed by caller")]
+  private bool TryCreateCertificate(string certPath, string? keyPath, [NotNullWhen(true)] out X509Certificate2? cert)
+  {
+    var certPem = _fileSystem.FileExists(certPath) ? _fileSystem.ReadAllText(certPath) : null;
+    var keyPem = keyPath is not null && _fileSystem.FileExists(keyPath) ? _fileSystem.ReadAllText(keyPath) : null;
 
     if (keyPem is null)
     {
@@ -97,13 +106,6 @@ internal sealed class DockerCertificate : IDisposable
 
     cert = string.IsNullOrWhiteSpace(certPem) ? null : X509Certificate2.CreateFromPem(certPem, keyPem);
     return cert is not null;
-  }
-
-  private static X509Certificate2 Clone(X509Certificate2 cert)
-  {
-    var keyStorageFlags = X509KeyStorageFlags.Exportable | X509KeyStorageFlags.PersistKeySet;
-    var pfxBytes = cert.Export(X509ContentType.Pkcs12, string.Empty);
-    return X509CertificateLoader.LoadPkcs12(pfxBytes, string.Empty, keyStorageFlags);
   }
 
   private void Dispose(bool disposing)

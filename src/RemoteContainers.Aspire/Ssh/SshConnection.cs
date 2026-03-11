@@ -1,4 +1,4 @@
-// <copyright file="SshTunnelClient.cs" company="Henrik Jensen">
+// <copyright file="SshConnection.cs" company="Henrik Jensen">
 // Copyright 2026 Henrik Jensen
 //
 // Licensed under the Apache License, Version 2.0 (the "License")
@@ -17,9 +17,9 @@
 using System.Diagnostics.CodeAnalysis;
 using Renci.SshNet;
 
-namespace Hj.RemoteContainers.Aspire;
+namespace Hj.RemoteContainers.Aspire.Ssh;
 
-internal sealed class SshTunnelClient : IDisposable
+internal sealed class SshConnection : ISshConnection
 {
   private readonly AppConfiguration _appConfiguration;
 
@@ -28,7 +28,7 @@ internal sealed class SshTunnelClient : IDisposable
 
   private bool _disposedValue;
 
-  public SshTunnelClient(AppConfiguration appConfiguration) => _appConfiguration = appConfiguration;
+  public SshConnection(AppConfiguration appConfiguration) => _appConfiguration = appConfiguration;
 
   [MemberNotNullWhen(true, nameof(_sshClient))]
   public bool IsConnected => _sshClient?.IsConnected ?? false;
@@ -66,7 +66,7 @@ internal sealed class SshTunnelClient : IDisposable
   }
 
   [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "See Dispose()")]
-  public ForwardedPortLocal ForwardPort(uint port)
+  public ISshForwardedPort ForwardPort(uint port)
   {
     if (!IsConnected)
     {
@@ -86,7 +86,7 @@ internal sealed class SshTunnelClient : IDisposable
       throw;
     }
 
-    return forwardedPort;
+    return new SshForwardedPort(forwardedPort);
   }
 
   private static List<PrivateKeyFile> LoadSshKeyFiles(string keyDir)

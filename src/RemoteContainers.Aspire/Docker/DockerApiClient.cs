@@ -15,26 +15,24 @@
 // </copyright>
 
 using System.Text.Json;
-using Hj.RemoteContainers.Aspire.Models;
 using Microsoft.Extensions.Logging;
 
-namespace Hj.RemoteContainers.Aspire;
+namespace Hj.RemoteContainers.Aspire.Docker;
 
 /// <summary>
 /// Queries the Docker REST API to resolve container port bindings.
 /// </summary>
-internal sealed class DockerApiClient
+internal sealed class DockerApiClient : IDockerApiClient
 {
-  private static readonly TimeSpan _containerStartTimeout = TimeSpan.FromMinutes(5);
-  private static readonly TimeSpan _containerPollInterval = TimeSpan.FromSeconds(5);
-
   private readonly ILogger<DockerApiClient> _logger;
   private readonly HttpClient _httpClient;
+  private readonly AppConfiguration _appConfiguration;
 
-  public DockerApiClient(ILogger<DockerApiClient> logger, HttpClient httpClient)
+  public DockerApiClient(ILogger<DockerApiClient> logger, HttpClient httpClient, AppConfiguration appConfiguration)
   {
     _logger = logger;
     _httpClient = httpClient;
+    _appConfiguration = appConfiguration;
   }
 
   /// <summary>
@@ -59,7 +57,9 @@ internal sealed class DockerApiClient
   /// </returns>
   public async Task<List<uint>?> GetAllContainerHostPortsAsync(string resourceName, CancellationToken cancellationToken)
   {
-    var deadline = DateTime.UtcNow + _containerStartTimeout;
+    var startTimeout = _appConfiguration.ContainerStartTimeout;
+    var pollInterval = _appConfiguration.ContainerPollInterval;
+    var deadline = DateTime.UtcNow + startTimeout;
     string? lastSeenId = null;
     var isFirstPoll = true;
 
@@ -75,7 +75,7 @@ internal sealed class DockerApiClient
             // Found on the very first attempt — might be a stale container from a previous Aspire run. Record the ID and re-poll to confirm.
             lastSeenId = result.Id;
             isFirstPoll = false;
-            await Task.Delay(_containerPollInterval, cancellationToken);
+            await Task.Delay(pollInterval, cancellationToken);
             continue;
           }
 
@@ -92,7 +92,7 @@ internal sealed class DockerApiClient
 
           // Container ID changed between polls — track the new one and re-confirm.
           lastSeenId = result.Id;
-          await Task.Delay(_containerPollInterval, cancellationToken);
+          await Task.Delay(pollInterval, cancellationToken);
           continue;
         }
 
@@ -111,7 +111,7 @@ internal sealed class DockerApiClient
         isFirstPoll = false;
       }
 
-      await Task.Delay(_containerPollInterval, cancellationToken);
+      await Task.Delay(pollInterval, cancellationToken);
     }
 
     if (_logger.IsEnabled(LogLevel.Warning))
@@ -119,7 +119,7 @@ internal sealed class DockerApiClient
       _logger.LogWarning(
         "Container {ResourceName} not found in Docker after {Timeout}s — no SSH tunnels created",
         resourceName,
-        _containerStartTimeout.TotalSeconds);
+        startTimeout.TotalSeconds);
     }
 
     return null;

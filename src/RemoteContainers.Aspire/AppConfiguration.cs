@@ -35,13 +35,19 @@ internal sealed class AppConfiguration
     _environmentVariables = environmentVariables;
   }
 
+  public TimeSpan ContainerStartTimeout =>
+    _configuration.GetValue<TimeSpan?>("RemoteContainers:ContainerStartTimeout") ?? TimeSpan.FromMinutes(5);
+
+  public TimeSpan ContainerPollInterval =>
+    _configuration.GetValue<TimeSpan?>("RemoteContainers:ContainerPollInterval") ?? TimeSpan.FromSeconds(5);
+
   public string SshKeyPath => Path.Combine(_environmentUserProfilePath, ".ssh");
 
   public string SshHost
   {
     get
     {
-      var sshHost = _configuration["SSH_HOST"];
+      var sshHost = _configuration["RemoteContainers:SshHost"];
       return string.IsNullOrWhiteSpace(sshHost)
         ? (DockerHost?.Host ?? throw new InvalidOperationException("No SSH host found."))
         : sshHost;
@@ -52,7 +58,7 @@ internal sealed class AppConfiguration
   {
     get
     {
-      var sshUser = _configuration["SSH_USER"];
+      var sshUser = _configuration["RemoteContainers:SshUser"];
       return string.IsNullOrWhiteSpace(sshUser)
         ? _environmentUserName
         : sshUser;

@@ -17,33 +17,32 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
-using Renci.SshNet;
 
-namespace Hj.RemoteContainers.Aspire;
+namespace Hj.RemoteContainers.Aspire.Ssh;
 
 /// <summary>
 /// Manages SSH port forwarding tunnels for remote Docker container access.
 /// </summary>
-internal sealed class SshTunnelManager : IDisposable
+internal sealed class SshTunnelManager : ISshTunnelManager, IDisposable
 {
   private readonly ILogger<SshTunnelManager> _logger;
-  private readonly DockerApiClient _dockerApiClient;
-  private readonly Lazy<SshTunnelClient> _sshTunnelClient;
+  private readonly IDockerApiClient _dockerApiClient;
+  private readonly Lazy<ISshConnection> _sshConnection;
 
-  private readonly ConcurrentDictionary<string, ConcurrentBag<ForwardedPortLocal>> _forwardedPortsByResource = new();
+  private readonly ConcurrentDictionary<string, ConcurrentBag<ISshForwardedPort>> _forwardedPortsByResource = new();
   private bool _disposedValue;
 
   public SshTunnelManager(
     ILogger<SshTunnelManager> logger,
-    SshTunnelClient sshTunnelClient,
-    DockerApiClient dockerApiClient)
+    ISshConnection sshConnection,
+    IDockerApiClient dockerApiClient)
   {
     _logger = logger;
     _dockerApiClient = dockerApiClient;
-    _sshTunnelClient = new Lazy<SshTunnelClient>(() =>
+    _sshConnection = new Lazy<ISshConnection>(() =>
     {
-      sshTunnelClient.Connect();
-      return sshTunnelClient;
+      sshConnection.Connect();
+      return sshConnection;
     });
   }
 
@@ -56,7 +55,7 @@ internal sealed class SshTunnelManager : IDisposable
   [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "See Dispose()")]
   public async Task AddAllContainerPortForwardsAsync(string resourceName, CancellationToken cancellationToken)
   {
-    if (!_sshTunnelClient.Value.IsConnected)
+    if (!_sshConnection.Value.IsConnected)
     {
       return;
     }
@@ -71,7 +70,7 @@ internal sealed class SshTunnelManager : IDisposable
 
     foreach (var port in portMappings)
     {
-      var forwardedPort = _sshTunnelClient.Value.ForwardPort(port);
+      var forwardedPort = _sshConnection.Value.ForwardPort(port);
       resourcePorts.Add(forwardedPort);
 
       if (_logger.IsEnabled(LogLevel.Information))
@@ -131,9 +130,9 @@ internal sealed class SshTunnelManager : IDisposable
           RemoveAllContainerPortForwards(resourceName);
         }
 
-        if (_sshTunnelClient.IsValueCreated)
+        if (_sshConnection.IsValueCreated)
         {
-          _sshTunnelClient.Value.Dispose();
+          _sshConnection.Value.Dispose();
         }
       }
 

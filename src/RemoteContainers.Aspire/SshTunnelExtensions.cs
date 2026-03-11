@@ -45,7 +45,7 @@ public static class SshTunnelExtensions
       return builder;
     }
 
-    services.AddHttpClient<DockerApiClient>(httpClient =>
+    services.AddHttpClient<IDockerApiClient, DockerApiClient>(httpClient =>
       {
         httpClient.BaseAddress = appConfiguration.DockerHost.Uri;
       })
@@ -54,9 +54,10 @@ public static class SshTunnelExtensions
 
     services
       .AddSingleton(appConfiguration)
+      .AddSingleton<IFileSystem, FileSystem>()
       .AddSingleton<DockerCertificate>()
-      .AddSingleton<SshTunnelClient>()
-      .AddSingleton<SshTunnelManager>()
+      .AddSingleton<ISshConnection, SshConnection>()
+      .AddSingleton<ISshTunnelManager, SshTunnelManager>()
       .AddEventingSubscriber<SshTunnelLifecycleHook>();
 
     return builder;
