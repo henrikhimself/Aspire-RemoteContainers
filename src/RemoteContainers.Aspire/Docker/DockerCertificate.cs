@@ -87,7 +87,9 @@ internal sealed class DockerCertificate : IDisposable
 
   private static X509Certificate2 Clone(X509Certificate2 cert)
   {
-    var keyStorageFlags = X509KeyStorageFlags.Exportable | X509KeyStorageFlags.PersistKeySet;
+    var keyStorageFlags = OperatingSystem.IsMacOS()
+      ? X509KeyStorageFlags.Exportable
+      : X509KeyStorageFlags.EphemeralKeySet | X509KeyStorageFlags.Exportable;
     var pfxBytes = cert.Export(X509ContentType.Pkcs12, string.Empty);
     return X509CertificateLoader.LoadPkcs12(pfxBytes, string.Empty, keyStorageFlags);
   }
