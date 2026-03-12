@@ -55,7 +55,7 @@ internal sealed class DockerCertificate : IDisposable
     {
       if (_logger.IsEnabled(LogLevel.Error))
       {
-        _logger.LogError("Failed to get CA");
+        _logger.LogError("Failed to load CA using path '{DockerCertPath}'", dockerCertPath);
       }
 
       return false;
@@ -66,7 +66,7 @@ internal sealed class DockerCertificate : IDisposable
     {
       if (_logger.IsEnabled(LogLevel.Error))
       {
-        _logger.LogError("Failed to get client certificate");
+        _logger.LogError("Failed to load client certificate using path '{DockerCertPath}'", dockerCertPath);
       }
 
       _caCert.Dispose();
@@ -87,7 +87,7 @@ internal sealed class DockerCertificate : IDisposable
 
   private static X509Certificate2 Clone(X509Certificate2 cert)
   {
-    var keyStorageFlags = X509KeyStorageFlags.Exportable | X509KeyStorageFlags.PersistKeySet;
+    var keyStorageFlags = X509KeyStorageFlags.Exportable;
     var pfxBytes = cert.Export(X509ContentType.Pkcs12, string.Empty);
     return X509CertificateLoader.LoadPkcs12(pfxBytes, string.Empty, keyStorageFlags);
   }

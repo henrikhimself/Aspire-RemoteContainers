@@ -20,7 +20,5 @@ internal interface ISshForwardedPort : IDisposable
 {
   uint Port { get; }
 
-  uint? BoundPort { get; }
-
   void Stop();
 }

@@ -66,7 +66,7 @@ internal sealed class SshTunnelManager : ISshTunnelManager, IDisposable
       return;
     }
 
-    var resourcePorts = _forwardedPortsByResource.GetOrAdd(resourceName, _ => []);
+    var resourcePorts = _forwardedPortsByResource.GetOrAdd(resourceName, _ => new ConcurrentBag<ISshForwardedPort>());
 
     foreach (var port in portMappings)
     {
@@ -100,14 +100,14 @@ internal sealed class SshTunnelManager : ISshTunnelManager, IDisposable
 
         if (_logger.IsEnabled(LogLevel.Information))
         {
-          _logger.LogInformation("SSH tunnel removed for {ResourceName} port {Port}", resourceName, forwardedPort.BoundPort);
+          _logger.LogInformation("SSH tunnel removed for {ResourceName} port {Port}", resourceName, forwardedPort.Port);
         }
       }
       catch (Exception ex)
       {
         if (_logger.IsEnabled(LogLevel.Warning))
         {
-          _logger.LogWarning(ex, "Failed to clean up SSH tunnel for {ResourceName} port {Port}", resourceName, forwardedPort.BoundPort);
+          _logger.LogWarning(ex, "Failed to clean up SSH tunnel for {ResourceName} port {Port}", resourceName, forwardedPort.Port);
         }
       }
     }

@@ -14,7 +14,6 @@
 // limitations under the License.
 // </copyright>
 
-using System.Security.Cryptography.X509Certificates;
 using Aspire.Hosting;
 using Aspire.Hosting.Lifecycle;
 using Microsoft.Extensions.DependencyInjection;
@@ -49,40 +48,18 @@ public static class SshTunnelExtensions
       {
         httpClient.BaseAddress = appConfiguration.DockerHost.Uri;
       })
-      .ConfigurePrimaryHttpMessageHandler(CreateHttpMessageHandler)
+      .ConfigurePrimaryHttpMessageHandler(sp => sp.GetRequiredService<DockerMessageHandler>().Init())
       .AddStandardResilienceHandler();
 
     services
       .AddSingleton(appConfiguration)
       .AddSingleton<IFileSystem, FileSystem>()
       .AddSingleton<DockerCertificate>()
+      .AddTransient<DockerMessageHandler>()
       .AddSingleton<ISshConnection, SshConnection>()
       .AddSingleton<ISshTunnelManager, SshTunnelManager>()
       .AddEventingSubscriber<SshTunnelLifecycleHook>();
 
     return builder;
-  }
-
-  private static HttpMessageHandler CreateHttpMessageHandler(IServiceProvider sp)
-  {
-    var handler = new HttpClientHandler();
-    var dockerCert = sp.GetRequiredService<DockerCertificate>();
-    if (dockerCert.TryGetCertificate(out var caCert, out var clientCert))
-    {
-      handler.ClientCertificates.Add(clientCert);
-      handler.ServerCertificateCustomValidationCallback = (_, serverCert, chain, _) =>
-      {
-        if (serverCert is null || chain is null)
-        {
-          return false;
-        }
-
-        chain.ChainPolicy.CustomTrustStore.Add(caCert);
-        chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-        return chain.Build(serverCert);
-      };
-    }
-
-    return handler;
   }
 }

@@ -26,8 +26,6 @@ internal sealed class SshForwardedPort : ISshForwardedPort
 
   public uint Port => _forwardedPort.Port;
 
-  public uint? BoundPort => _forwardedPort.BoundPort;
-
   public void Stop() => _forwardedPort.Stop();
 
   public void Dispose() => _forwardedPort.Dispose();
