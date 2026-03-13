@@ -1,0 +1,9 @@
+[*.cs]
+# CA1707: Test method names intentionally use underscores (Subject_Scenario_Expectation convention)
+dotnet_diagnostic.CA1707.severity = none
+
+# CA2000: Dispose objects before losing scope - suppressed in test code where IDisposable mocks are
+#         intentionally passed to the SUT which owns their lifetime, or disposal is being verified
+dotnet_diagnostic.CA2000.severity = none
+# IDE1006: Test method names intentionally do not include the Async suffix
+dotnet_diagnostic.IDE1006.severity = none

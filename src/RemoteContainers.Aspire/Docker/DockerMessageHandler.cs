@@ -20,14 +20,14 @@ namespace Hj.RemoteContainers.Aspire.Docker;
 
 internal sealed class DockerMessageHandler : HttpClientHandler, IDisposable
 {
-  private readonly DockerCertificate _dockerCertificate;
+  private readonly IDockerCertificate _dockerCertificate;
 
   private X509Certificate2? _caCert;
   private X509Certificate2? _clientCert;
 
   private volatile bool _disposed;
 
-  public DockerMessageHandler(DockerCertificate dockerCertificate) => _dockerCertificate = dockerCertificate;
+  public DockerMessageHandler(IDockerCertificate dockerCertificate) => _dockerCertificate = dockerCertificate;
 
   public HttpMessageHandler Init()
   {

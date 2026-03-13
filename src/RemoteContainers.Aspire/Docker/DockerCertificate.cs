@@ -20,7 +20,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Hj.RemoteContainers.Aspire.Docker;
 
-internal sealed class DockerCertificate : IDisposable
+internal sealed class DockerCertificate : IDockerCertificate, IDisposable
 {
   private readonly ILogger<DockerCertificate> _logger;
   private readonly AppConfiguration _appConfiguration;

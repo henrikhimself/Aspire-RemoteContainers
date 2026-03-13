@@ -19,6 +19,7 @@ using Renci.SshNet;
 
 namespace Hj.RemoteContainers.Aspire.Ssh;
 
+[ExcludeFromCodeCoverage(Justification = "External dependencies")]
 internal sealed class SshConnection : ISshConnection
 {
   private readonly AppConfiguration _appConfiguration;

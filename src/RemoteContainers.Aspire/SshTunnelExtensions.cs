@@ -14,6 +14,7 @@
 // limitations under the License.
 // </copyright>
 
+using System.Diagnostics.CodeAnalysis;
 using Aspire.Hosting;
 using Aspire.Hosting.Lifecycle;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,6 +30,7 @@ public static class SshTunnelExtensions
   /// </summary>
   /// <param name="builder">An application builder instance.</param>
   /// <returns>The application builder instance.</returns>
+  [ExcludeFromCodeCoverage(Justification = "Initialization code")]
   public static IDistributedApplicationBuilder AddSshTunneling(this IDistributedApplicationBuilder builder)
   {
     var services = builder.Services;
@@ -54,7 +56,7 @@ public static class SshTunnelExtensions
     services
       .AddSingleton(appConfiguration)
       .AddSingleton<IFileSystem, FileSystem>()
-      .AddSingleton<DockerCertificate>()
+      .AddSingleton<IDockerCertificate, DockerCertificate>()
       .AddTransient<DockerMessageHandler>()
       .AddSingleton<ISshConnection, SshConnection>()
       .AddSingleton<ISshTunnelManager, SshTunnelManager>()
