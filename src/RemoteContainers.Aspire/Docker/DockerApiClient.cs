@@ -102,11 +102,6 @@ internal sealed class DockerApiClient : IDockerApiClient
         {
           _logger.LogError(ex, "Docker API request failed for {ResourceName}; retrying…", resourceName);
         }
-
-        // Do not reset lastSeenId or isFirstPoll — a transient error gives no information about the
-        // container state, so the existing stabilization state must be preserved. Resetting would
-        // set lastSeenId to null, causing the next successful find to be accepted immediately via the
-        // "appeared after an empty poll" path, which defeats the two-poll confirmation.
       }
 
       await Task.Delay(pollInterval, cancellationToken);
