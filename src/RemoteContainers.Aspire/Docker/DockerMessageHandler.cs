@@ -14,6 +14,7 @@
 // limitations under the License.
 // </copyright>
 
+using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 
 namespace Hj.RemoteContainers.Aspire.Docker;
@@ -34,9 +35,9 @@ internal sealed class DockerMessageHandler : HttpClientHandler, IDisposable
     if (_dockerCertificate.TryGetCertificate(out _caCert, out _clientCert))
     {
       ClientCertificates.Add(_clientCert);
-      ServerCertificateCustomValidationCallback = (_, serverCert, chain, _) =>
+      ServerCertificateCustomValidationCallback = (_, serverCert, chain, sslPolicyErrors) =>
       {
-        if (serverCert is null || chain is null)
+        if (serverCert is null || chain is null || (sslPolicyErrors & ~SslPolicyErrors.RemoteCertificateChainErrors) != SslPolicyErrors.None)
         {
           return false;
         }
