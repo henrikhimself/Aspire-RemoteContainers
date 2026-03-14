@@ -4,7 +4,10 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 builder.AddSshTunneling();
 
-_ = builder.AddContainer("whoami", "traefik/whoami:latest")
-    .WithHttpEndpoint(port: 8080, targetPort: 80);
+for (var i = 0; i < 3; i++)
+{
+  _ = builder.AddContainer("whoami-" + i, "traefik/whoami:latest")
+      .WithHttpEndpoint(port: 8080 + i, targetPort: 80);
+}
 
 await builder.Build().RunAsync();

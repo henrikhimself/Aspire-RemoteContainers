@@ -34,7 +34,7 @@ public sealed class AppConfigurationTests
   }
 
   [Fact]
-  public void ContainerPollInterval_WhenNotConfigured_ReturnsFiveSeconds()
+  public void ContainerPollInterval_WhenNotConfigured_ReturnsOneSecond()
   {
     // Arrange
     var sut = Fixture.Create().Build();
@@ -43,7 +43,7 @@ public sealed class AppConfigurationTests
     var result = sut.ContainerPollInterval;
 
     // Assert
-    Assert.Equal(TimeSpan.FromSeconds(5), result);
+    Assert.Equal(TimeSpan.FromSeconds(1), result);
   }
 
   [Fact]

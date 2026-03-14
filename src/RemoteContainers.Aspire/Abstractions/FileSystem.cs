@@ -14,8 +14,11 @@
 // limitations under the License.
 // </copyright>
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace Hj.RemoteContainers.Aspire.Abstractions;
 
+[ExcludeFromCodeCoverage(Justification = "External dependencies")]
 internal sealed class FileSystem : IFileSystem
 {
   public bool FileExists(string path) => File.Exists(path);

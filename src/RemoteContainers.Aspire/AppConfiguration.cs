@@ -39,7 +39,7 @@ internal sealed class AppConfiguration
     _configuration.GetValue<TimeSpan?>("RemoteContainers:ContainerStartTimeout") ?? TimeSpan.FromMinutes(5);
 
   public TimeSpan ContainerPollInterval =>
-    _configuration.GetValue<TimeSpan?>("RemoteContainers:ContainerPollInterval") ?? TimeSpan.FromSeconds(5);
+    _configuration.GetValue<TimeSpan?>("RemoteContainers:ContainerPollInterval") ?? TimeSpan.FromSeconds(1);
 
   public string SshKeyPath => Path.Combine(_environmentUserProfilePath, ".ssh");
 

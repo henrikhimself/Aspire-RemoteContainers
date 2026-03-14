@@ -24,46 +24,29 @@ namespace Hj.RemoteContainers.Aspire;
 
 internal sealed class SshTunnelLifecycleHook : IDistributedApplicationEventingSubscriber
 {
+  private static readonly TimeSpan _notificationAutoDismissDelay = TimeSpan.FromSeconds(5);
+
   private readonly ILogger<SshTunnelLifecycleHook> _logger;
   private readonly ISshTunnelManager _tunnelManager;
+  private readonly IInteractionService _interactionService;
 
-  public SshTunnelLifecycleHook(ILogger<SshTunnelLifecycleHook> logger, ISshTunnelManager tunnelManager)
+  public SshTunnelLifecycleHook(ILogger<SshTunnelLifecycleHook> logger, ISshTunnelManager tunnelManager, IInteractionService interactionService)
   {
     _logger = logger;
     _tunnelManager = tunnelManager;
+    _interactionService = interactionService;
   }
 
   public Task SubscribeAsync(IDistributedApplicationEventing eventing, DistributedApplicationExecutionContext executionContext, CancellationToken cancellationToken)
   {
-    eventing.Subscribe<ResourceEndpointsAllocatedEvent>(SetUpTunnelAsync);
     eventing.Subscribe<ResourceReadyEvent>(SetUpTunnelOnReadyAsync);
-    eventing.Subscribe<ResourceStoppedEvent>(TearDownTunnel);
+    eventing.Subscribe<ResourceStoppedEvent>(TearDownTunnelAsync);
 
     return Task.CompletedTask;
   }
 
   private static bool IsContainerResource(IResource resource) =>
     resource.Annotations.OfType<ContainerImageAnnotation>().Any();
-
-  private async Task SetUpTunnelAsync(ResourceEndpointsAllocatedEvent evt, CancellationToken cancellationToken)
-  {
-    if (!IsContainerResource(evt.Resource))
-    {
-      return;
-    }
-
-    try
-    {
-      await _tunnelManager.AddAllContainerPortForwardsAsync(evt.Resource.Name, cancellationToken);
-    }
-    catch (Exception ex)
-    {
-      if (_logger.IsEnabled(LogLevel.Error))
-      {
-        _logger.LogError(ex, "Failed to set up SSH tunnel for resource {ResourceName}", evt.Resource.Name);
-      }
-    }
-  }
 
   private async Task SetUpTunnelOnReadyAsync(ResourceReadyEvent evt, CancellationToken cancellationToken)
   {
@@ -77,6 +60,7 @@ internal sealed class SshTunnelLifecycleHook : IDistributedApplicationEventingSu
       // Remove stale tunnels from the previous run of this resource before creating new ones.
       _tunnelManager.RemoveAllContainerPortForwards(evt.Resource.Name);
       await _tunnelManager.AddAllContainerPortForwardsAsync(evt.Resource.Name, cancellationToken);
+      await PromptNotificationAsync($"Port forwarding started for {evt.Resource.Name}.", MessageIntent.Success, cancellationToken);
     }
     catch (Exception ex)
     {
@@ -84,14 +68,16 @@ internal sealed class SshTunnelLifecycleHook : IDistributedApplicationEventingSu
       {
         _logger.LogError(ex, "Failed to re-establish SSH tunnel for resource {ResourceName}", evt.Resource.Name);
       }
+
+      await PromptNotificationAsync($"Port forward creation failed for {evt.Resource.Name}: {ex.Message}", MessageIntent.Error, cancellationToken);
     }
   }
 
-  private Task TearDownTunnel(ResourceStoppedEvent evt, CancellationToken cancellationToken)
+  private async Task TearDownTunnelAsync(ResourceStoppedEvent evt, CancellationToken cancellationToken)
   {
     if (!IsContainerResource(evt.Resource))
     {
-      return Task.CompletedTask;
+      return;
     }
 
     try
@@ -104,8 +90,30 @@ internal sealed class SshTunnelLifecycleHook : IDistributedApplicationEventingSu
       {
         _logger.LogError(ex, "Failed to tear down SSH tunnel for resource {ResourceName}", evt.Resource.Name);
       }
+
+      await PromptNotificationAsync($"Port forwarding removal failed for {evt.Resource.Name}.", MessageIntent.Error, cancellationToken);
+    }
+  }
+
+  private async Task PromptNotificationAsync(string message, MessageIntent intent, CancellationToken cancellationToken)
+  {
+    if (!_interactionService.IsAvailable)
+    {
+      return;
     }
 
-    return Task.CompletedTask;
+    var options = new NotificationInteractionOptions { Intent = intent };
+
+    if (intent == MessageIntent.Error)
+    {
+      await _interactionService.PromptNotificationAsync("SSH Tunnel", message, options, cancellationToken);
+    }
+    else
+    {
+      // Auto-dismiss non-error notifications after a short delay so they don't linger.
+      using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+      cts.CancelAfter(_notificationAutoDismissDelay);
+      await _interactionService.PromptNotificationAsync("SSH Tunnel", message, options, cts.Token);
+    }
   }
 }

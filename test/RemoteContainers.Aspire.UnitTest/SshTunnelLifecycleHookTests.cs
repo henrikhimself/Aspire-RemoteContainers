@@ -12,69 +12,6 @@ public sealed class SshTunnelLifecycleHookTests
   private static readonly DistributedApplicationExecutionContext ExecutionContext = new(DistributedApplicationOperation.Run);
 
   [Fact]
-  public async Task SubscribeAsync_RegistersAllThreeEventHandlers()
-  {
-    // Arrange
-    var f = Fixture.Create();
-
-    // Act
-    await f.Sut.SubscribeAsync(f.Eventing, ExecutionContext, CancellationToken.None);
-
-    // Assert
-    f.Eventing.Received(1).Subscribe(Arg.Any<Func<ResourceEndpointsAllocatedEvent, CancellationToken, Task>>());
-    f.Eventing.Received(1).Subscribe(Arg.Any<Func<ResourceReadyEvent, CancellationToken, Task>>());
-    f.Eventing.Received(1).Subscribe(Arg.Any<Func<ResourceStoppedEvent, CancellationToken, Task>>());
-  }
-
-  [Fact]
-  public async Task SetUpTunnel_ContainerResource_CallsAddAllContainerPortForwards()
-  {
-    // Arrange
-    var f = Fixture.Create();
-    var handler = f.CaptureHandler<ResourceEndpointsAllocatedEvent>();
-    await f.Sut.SubscribeAsync(f.Eventing, ExecutionContext, CancellationToken.None);
-
-    // Act
-    await handler(new ResourceEndpointsAllocatedEvent(CreateContainerResource("my-resource"), Substitute.For<IServiceProvider>()), CancellationToken.None);
-
-    // Assert
-    await f.TunnelManager.Received(1).AddAllContainerPortForwardsAsync("my-resource", Arg.Any<CancellationToken>());
-  }
-
-  [Fact]
-  public async Task SetUpTunnel_NonContainerResource_DoesNotCallTunnelManager()
-  {
-    // Arrange
-    var f = Fixture.Create();
-    var handler = f.CaptureHandler<ResourceEndpointsAllocatedEvent>();
-    await f.Sut.SubscribeAsync(f.Eventing, ExecutionContext, CancellationToken.None);
-
-    // Act
-    await handler(new ResourceEndpointsAllocatedEvent(CreateNonContainerResource("my-resource"), Substitute.For<IServiceProvider>()), CancellationToken.None);
-
-    // Assert
-    await f.TunnelManager.DidNotReceive().AddAllContainerPortForwardsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
-  }
-
-  [Fact]
-  public async Task SetUpTunnel_WhenManagerThrows_ExceptionIsSwallowed()
-  {
-    // Arrange
-    var f = Fixture.Create();
-    var handler = f.CaptureHandler<ResourceEndpointsAllocatedEvent>();
-    f.TunnelManager.AddAllContainerPortForwardsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-        .ThrowsAsync(new InvalidOperationException("boom"));
-    await f.Sut.SubscribeAsync(f.Eventing, ExecutionContext, CancellationToken.None);
-
-    // Act
-    var exception = await Record.ExceptionAsync(
-        () => handler(new ResourceEndpointsAllocatedEvent(CreateContainerResource("my-resource"), Substitute.For<IServiceProvider>()), CancellationToken.None));
-
-    // Assert
-    Assert.Null(exception);
-  }
-
-  [Fact]
   public async Task SetUpTunnelOnReady_ContainerResource_RemovesOldTunnelsThenAddsNew()
   {
     // Arrange
@@ -128,7 +65,7 @@ public sealed class SshTunnelLifecycleHookTests
   }
 
   [Fact]
-  public async Task TearDownTunnel_ContainerResource_CallsRemoveAllContainerPortForwards()
+  public async Task TearDownTunnelAsync_ContainerResource_CallsRemoveAllContainerPortForwards()
   {
     // Arrange
     var f = Fixture.Create();
@@ -143,7 +80,7 @@ public sealed class SshTunnelLifecycleHookTests
   }
 
   [Fact]
-  public async Task TearDownTunnel_NonContainerResource_DoesNotCallTunnelManager()
+  public async Task TearDownTunnelAsync_NonContainerResource_DoesNotCallTunnelManager()
   {
     // Arrange
     var f = Fixture.Create();
@@ -158,7 +95,7 @@ public sealed class SshTunnelLifecycleHookTests
   }
 
   [Fact]
-  public async Task TearDownTunnel_WhenManagerThrows_ExceptionIsSwallowed()
+  public async Task TearDownTunnelAsync_WhenManagerThrows_ExceptionIsSwallowed()
   {
     // Arrange
     var f = Fixture.Create();
@@ -173,6 +110,84 @@ public sealed class SshTunnelLifecycleHookTests
 
     // Assert
     Assert.Null(exception);
+  }
+
+  [Fact]
+  public async Task SetUpTunnel_WhenContainerReady_SendsSuccessNotification()
+  {
+    // Arrange
+    var f = Fixture.Create();
+    var handler = f.CaptureHandler<ResourceReadyEvent>();
+    await f.Sut.SubscribeAsync(f.Eventing, ExecutionContext, CancellationToken.None);
+
+    // Act
+    await handler(new ResourceReadyEvent(CreateContainerResource("my-resource"), Substitute.For<IServiceProvider>()), CancellationToken.None);
+
+    // Assert
+    _ = f.InteractionService.Received(1).PromptNotificationAsync(
+      Arg.Any<string>(),
+      Arg.Any<string>(),
+      Arg.Is<NotificationInteractionOptions?>(o => o!.Intent == MessageIntent.Success),
+      Arg.Any<CancellationToken>());
+  }
+
+  [Fact]
+  public async Task SetUpTunnel_WhenAddPortForwardFails_SendsErrorNotification()
+  {
+    // Arrange
+    var f = Fixture.Create();
+    var handler = f.CaptureHandler<ResourceReadyEvent>();
+    f.TunnelManager.AddAllContainerPortForwardsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        .ThrowsAsync(new InvalidOperationException("connection refused"));
+    await f.Sut.SubscribeAsync(f.Eventing, ExecutionContext, CancellationToken.None);
+
+    // Act
+    await handler(new ResourceReadyEvent(CreateContainerResource("my-resource"), Substitute.For<IServiceProvider>()), CancellationToken.None);
+
+    // Assert
+    _ = f.InteractionService.Received(1).PromptNotificationAsync(
+      Arg.Any<string>(),
+      Arg.Is<string>(m => m.Contains("connection refused")),
+      Arg.Is<NotificationInteractionOptions?>(o => o!.Intent == MessageIntent.Error),
+      Arg.Any<CancellationToken>());
+  }
+
+  [Fact]
+  public async Task SetUpTunnel_WhenInteractionServiceNotAvailable_DoesNotSendNotification()
+  {
+    // Arrange
+    var f = Fixture.Create(interactionAvailable: false);
+    var handler = f.CaptureHandler<ResourceReadyEvent>();
+    await f.Sut.SubscribeAsync(f.Eventing, ExecutionContext, CancellationToken.None);
+
+    // Act
+    await handler(new ResourceReadyEvent(CreateContainerResource("my-resource"), Substitute.For<IServiceProvider>()), CancellationToken.None);
+
+    // Assert
+    _ = f.InteractionService.DidNotReceive().PromptNotificationAsync(
+      Arg.Any<string>(),
+      Arg.Any<string>(),
+      Arg.Any<NotificationInteractionOptions?>(),
+      Arg.Any<CancellationToken>());
+  }
+
+  [Fact]
+  public async Task TearDownTunnelAsync_WhenInteractionServiceNotAvailable_DoesNotSendNotification()
+  {
+    // Arrange
+    var f = Fixture.Create(interactionAvailable: false);
+    var handler = f.CaptureHandler<ResourceStoppedEvent>();
+    await f.Sut.SubscribeAsync(f.Eventing, ExecutionContext, CancellationToken.None);
+
+    // Act
+    await handler(CreateResourceStoppedEvent(CreateContainerResource("my-resource")), CancellationToken.None);
+
+    // Assert
+    _ = f.InteractionService.DidNotReceive().PromptNotificationAsync(
+      Arg.Any<string>(),
+      Arg.Any<string>(),
+      Arg.Any<NotificationInteractionOptions?>(),
+      Arg.Any<CancellationToken>());
   }
 
   private static TestResource CreateContainerResource(string name)
@@ -203,17 +218,21 @@ public sealed class SshTunnelLifecycleHookTests
   private sealed record Fixture(
       SshTunnelLifecycleHook Sut,
       ISshTunnelManager TunnelManager,
-      IDistributedApplicationEventing Eventing)
+      IDistributedApplicationEventing Eventing,
+      IInteractionService InteractionService)
   {
-    public static Fixture Create()
+    public static Fixture Create(bool interactionAvailable = true)
     {
       var tunnelManager = Substitute.For<ISshTunnelManager>();
       var logger = Substitute.For<ILogger<SshTunnelLifecycleHook>>();
+      var interactionService = Substitute.For<IInteractionService>();
+      interactionService.IsAvailable.Returns(interactionAvailable);
 
       return new Fixture(
-          new SshTunnelLifecycleHook(logger, tunnelManager),
+          new SshTunnelLifecycleHook(logger, tunnelManager, interactionService),
           tunnelManager,
-          Substitute.For<IDistributedApplicationEventing>());
+          Substitute.For<IDistributedApplicationEventing>(),
+          interactionService);
     }
 
     public Func<T, CancellationToken, Task> CaptureHandler<T>()

@@ -14,10 +14,12 @@
 // limitations under the License.
 // </copyright>
 
+using System.Diagnostics.CodeAnalysis;
 using Renci.SshNet;
 
 namespace Hj.RemoteContainers.Aspire.Abstractions;
 
+[ExcludeFromCodeCoverage(Justification = "External dependencies")]
 internal sealed class SshForwardedPort : ISshForwardedPort
 {
   private readonly ForwardedPortLocal _forwardedPort;
