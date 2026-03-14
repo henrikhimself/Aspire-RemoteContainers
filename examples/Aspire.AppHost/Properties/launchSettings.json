@@ -12,7 +12,7 @@
         "ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL": "https://localhost:21021",
         "ASPIRE_DASHBOARD_MCP_ENDPOINT_URL": "https://localhost:23005",
         "ASPIRE_RESOURCE_SERVICE_ENDPOINT_URL": "https://localhost:22264",
-        "DOCKER_HOST": "tcp://lyn.td:2376",
+        "DOCKER_HOST": "tcp://my-server:2376",
         "DOCKER_TLS_VERIFY": "1",
         "DOCKER_CERT_PATH": "/opt/certs/client"
       }

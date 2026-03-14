@@ -41,10 +41,6 @@ internal sealed class DockerApiClient : IDockerApiClient
   /// </summary>
   /// <remarks>
   /// <para>
-  /// ResourceEndpointsAllocatedEvent fires before DCP actually starts containers on the remote Docker host, so an
-  /// immediate query would return an empty list. Polling handles this toctou.
-  /// </para>
-  /// <para>
   /// A stale container from a previous Aspire run may still be running when the event fires. To avoid tunnelling the wrong ports,
   /// the method requires the same container ID to appear on two consecutive polls before accepting the result. If DCP recycles
   /// the container between polls the ID changes and polling continues until the replacement stabilises.

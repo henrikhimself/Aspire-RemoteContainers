@@ -45,7 +45,7 @@ internal sealed class SshConnection : ISshConnection
     _keyFiles = LoadSshKeyFiles(keyDir);
     if (_keyFiles.Count == 0)
     {
-      throw new InvalidOperationException("No SSH private keys found.");
+      throw new InvalidOperationException("No compatible SSH private keys found.");
     }
 
     _sshClient = new SshClient(_appConfiguration.SshHost, _appConfiguration.SshUser, [.. _keyFiles]);
