@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/examples/">
+    <Project Path="examples/Aspire.AppHost/Aspire.AppHost.csproj" />
+  </Folder>
+  <Project Path="src/RemoteContainers.Aspire/RemoteContainers.Aspire.csproj" />
+  <Project Path="test/RemoteContainers.Aspire.UnitTest/RemoteContainers.Aspire.UnitTest.csproj" />
+</Solution>

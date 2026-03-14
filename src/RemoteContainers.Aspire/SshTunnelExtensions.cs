@@ -1,0 +1,67 @@
+// <copyright file="SshTunnelExtensions.cs" company="Henrik Jensen">
+// Copyright 2026 Henrik Jensen
+//
+// Licensed under the Apache License, Version 2.0 (the "License")
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+// </copyright>
+
+using System.Diagnostics.CodeAnalysis;
+using Aspire.Hosting;
+using Aspire.Hosting.Lifecycle;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Hj.RemoteContainers.Aspire;
+
+public static class SshTunnelExtensions
+{
+  /// <summary>
+  /// Enables automatic SSH port forwarding for all container resources when DOCKER_HOST points to
+  /// a remote Docker engine. After DCP allocates endpoints, every resource with at least one endpoint
+  /// is matched against running Docker containers and tunnelled automatically.
+  /// </summary>
+  /// <param name="builder">An application builder instance.</param>
+  /// <returns>The application builder instance.</returns>
+  [ExcludeFromCodeCoverage(Justification = "Initialization code")]
+  public static IDistributedApplicationBuilder AddSshTunneling(this IDistributedApplicationBuilder builder)
+  {
+    var services = builder.Services;
+
+    var environmentUserName = Environment.UserName;
+    var environmentUserProfilePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    var environmentVariables = Environment.GetEnvironmentVariables();
+    AppConfiguration appConfiguration = new(builder.Configuration, environmentUserName, environmentUserProfilePath, environmentVariables);
+
+    if (!appConfiguration.HasDockerHost)
+    {
+      // Skip setting up SSH tunnels.
+      return builder;
+    }
+
+    services.AddHttpClient<IDockerApiClient, DockerApiClient>(httpClient =>
+      {
+        httpClient.BaseAddress = appConfiguration.DockerHost.Uri;
+      })
+      .ConfigurePrimaryHttpMessageHandler(sp => sp.GetRequiredService<DockerMessageHandler>().Init())
+      .AddStandardResilienceHandler();
+
+    services
+      .AddSingleton(appConfiguration)
+      .AddSingleton<IFileSystem, FileSystem>()
+      .AddSingleton<IDockerCertificate, DockerCertificate>()
+      .AddTransient<DockerMessageHandler>()
+      .AddSingleton<ISshConnection, SshConnection>()
+      .AddSingleton<ISshTunnelManager, SshTunnelManager>()
+      .AddEventingSubscriber<SshTunnelLifecycleHook>();
+
+    return builder;
+  }
+}
