@@ -87,7 +87,7 @@ These can be set via any .NET configuration source (environment variables, `apps
 | `RemoteContainers:SshHost` | Hostname from `DOCKER_HOST` | Override the SSH connection target if it differs from the Docker API host. |
 | `RemoteContainers:SshUser` | Current OS username | Override the SSH username. |
 | `RemoteContainers:ContainerStartTimeout` | `00:05:00` | How long to wait for a container's ports to become available before giving up. Expressed as a `TimeSpan` string (e.g. `00:05:00`). |
-| `RemoteContainers:ContainerPollInterval` | `00:00:05` | How often to poll the Docker API while waiting for a container's ports. Expressed as a `TimeSpan` string (e.g. `00:00:05`). |
+| `RemoteContainers:ContainerPollInterval` | `00:00:01` | How often to poll the Docker API while waiting for a container's ports. Expressed as a `TimeSpan` string (e.g. `00:00:01`). |
 
 ### SSH Key Authentication
 
