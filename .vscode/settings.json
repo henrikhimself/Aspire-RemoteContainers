@@ -1,19 +1,19 @@
 {
-    "dotnet.defaultSolution": "RemoteContainers.slnx",
-    "editor.minimap.enabled": false,
-    "files.exclude": {
-      "**/bin": true,
-      "**/obj": true
-    },
-    "git.enableCommitSigning": true,
-    "csharp.debug.symbolOptions.searchNuGetOrgSymbolServer": true,
-    "csharp.debug.symbolOptions.searchMicrosoftSymbolServer": true,
-    "csharp.debug.justMyCode": true,
-    "csharp.debug.requireExactSource": true,
-    "csharp.debug.suppressJITOptimizations": false,
-    "editor.inlayHints.enabled": "on",
-    "csharp.inlayHints.enableInlayHintsForImplicitVariableTypes": true,
-    "csharp.inlayHints.enableInlayHintsForTypes": true,
-    "dotnet.inlayHints.enableInlayHintsForIndexerParameters": true,
-    "dotnet.inlayHints.enableInlayHintsForLiteralParameters": true
+  "dotnet.defaultSolution": "RemoteContainers.slnx",
+  "editor.minimap.enabled": false,
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true
+  },
+  "git.enableCommitSigning": true,
+  "csharp.debug.symbolOptions.searchNuGetOrgSymbolServer": true,
+  "csharp.debug.symbolOptions.searchMicrosoftSymbolServer": true,
+  "csharp.debug.justMyCode": true,
+  "csharp.debug.requireExactSource": true,
+  "csharp.debug.suppressJITOptimizations": false,
+  "editor.inlayHints.enabled": "on",
+  "csharp.inlayHints.enableInlayHintsForImplicitVariableTypes": true,
+  "csharp.inlayHints.enableInlayHintsForTypes": true,
+  "dotnet.inlayHints.enableInlayHintsForIndexerParameters": true,
+  "dotnet.inlayHints.enableInlayHintsForLiteralParameters": true
 }

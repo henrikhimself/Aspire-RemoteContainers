@@ -96,8 +96,6 @@ internal sealed class SshTunnelManager : ISshTunnelManager, IDisposable
       try
       {
         forwardedPort.Stop();
-        forwardedPort.Dispose();
-
         if (_logger.IsEnabled(LogLevel.Information))
         {
           _logger.LogInformation("SSH tunnel removed for {ResourceName} port {Port}", resourceName, forwardedPort.Port);
@@ -109,6 +107,10 @@ internal sealed class SshTunnelManager : ISshTunnelManager, IDisposable
         {
           _logger.LogWarning(ex, "Failed to clean up SSH tunnel for {ResourceName} port {Port}", resourceName, forwardedPort.Port);
         }
+      }
+      finally
+      {
+        forwardedPort.Dispose();
       }
     }
   }
