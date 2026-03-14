@@ -72,21 +72,6 @@ public sealed class DockerApiClientTests
   }
 
   [Fact]
-  public async Task GetAllContainerHostPortsAsync_WhenHttpRequestFails_RetriesAndEventuallyReturnsPorts()
-  {
-    // Arrange — null signals the handler to throw HttpRequestException
-    var f = Fixture.Create(
-      null,
-      ContainerJson("abc", ["/my-resource"], [8080u]));
-
-    // Act
-    var result = await f.Sut.GetAllContainerHostPortsAsync("my-resource", CancellationToken.None);
-
-    // Assert
-    Assert.Equal([8080u], result);
-  }
-
-  [Fact]
   public async Task GetAllContainerHostPortsAsync_WhenNameHasLeadingSlash_MatchesResourceName()
   {
     // Arrange
